@@ -118,9 +118,20 @@ if (process.env.NODE_ENV === 'development') {
             skipWaiting: true,
             additionalManifestEntries: assetsManifest,
             exclude: [
-                /\.DS_Store/
+                /\.DS_Store/,
+                /\.html$/ // Exclude HTML from precache (Cache-First); handle via runtimeCaching instead
             ],
-            maximumFileSizeToCacheInBytes: 32 * 1024 * 1024
+            maximumFileSizeToCacheInBytes: 32 * 1024 * 1024,
+            runtimeCaching: [{
+                // Apply NetworkFirst strategy to HTML and navigation requests (e.g. /editor/, /editor/?extension=...)
+                // Online: always fetch the latest from the network; Offline: fall back to cache
+                urlPattern: /(?:\.html|\/)(?:\?.*)?$/,
+                handler: 'NetworkFirst',
+                options: {
+                    cacheName: 'pages-cache',
+                    networkTimeoutSeconds: 3
+                }
+            }]
         }))
         .addPlugin(new WebpackPwaManifest({
             publicPath: './',
