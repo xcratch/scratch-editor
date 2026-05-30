@@ -132,7 +132,10 @@ if (process.env.NODE_ENV === 'development') {
                 handler: 'NetworkFirst',
                 options: {
                     cacheName: 'pages-cache',
-                    networkTimeoutSeconds: 3
+                    networkTimeoutSeconds: 3,
+                    fetchOptions: {
+                        cache: 'reload'
+                    }
                 }
             }]
         }))
