@@ -119,7 +119,10 @@ if (process.env.NODE_ENV === 'development') {
             additionalManifestEntries: assetsManifest,
             exclude: [
                 /\.DS_Store/,
-                /\.html$/ // Exclude HTML from precache (Cache-First); handle via runtimeCaching instead
+                /\.html$/,
+                /\.d\.ts$/, // Exclude TypeScript declaration files
+                /\.map$/, // Exclude source maps from precache
+                /^\.\.\// // Exclude assets in parent directories (like ../dist/)
             ],
             maximumFileSizeToCacheInBytes: 32 * 1024 * 1024,
             runtimeCaching: [{
