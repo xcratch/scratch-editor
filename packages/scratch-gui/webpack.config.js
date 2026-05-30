@@ -125,7 +125,7 @@ if (process.env.NODE_ENV === 'development') {
             runtimeCaching: [{
                 // Apply NetworkFirst strategy to HTML and navigation requests (e.g. /editor/, /editor/?extension=...)
                 // Online: always fetch the latest from the network; Offline: fall back to cache
-                urlPattern: /(?:\.html|\/)(?:\?.*)?$/,
+                urlPattern: ({request}) => request.mode === 'navigate',
                 handler: 'NetworkFirst',
                 options: {
                     cacheName: 'pages-cache',
