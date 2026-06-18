@@ -23,13 +23,19 @@
           });
         });
 
-        // 新しい Service Worker がアクティブになりページ制御を開始したときにリロードする
-        let refreshing = false;
-        navigator.serviceWorker.addEventListener('controllerchange', function () {
-          if (refreshing) return;
-          refreshing = true;
-          window.location.reload();
-        });
+        // Reload only when an existing Service Worker is already in control
+        // (i.e. on a repeat visit) so a newly activated SW takes effect.
+        // On the first registration the initial 'controllerchange' fired by
+        // clients.claim() would otherwise cause an unwanted reload, so skip
+        // adding the listener when there is no controller yet.
+        if (navigator.serviceWorker.controller) {
+          let refreshing = false;
+          navigator.serviceWorker.addEventListener('controllerchange', function () {
+            if (refreshing) return;
+            refreshing = true;
+            window.location.reload();
+          });
+        }
       } else {
         console.log('Service Worker is not supported by browser.');
       }
