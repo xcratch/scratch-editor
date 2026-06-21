@@ -223,7 +223,8 @@ const buildConfig = baseConfig.clone()
             guistandalone: './src/playground/standalone.jsx',
             blocksonly: './src/playground/blocks-only.jsx',
             compatibilitytesting: './src/playground/compatibility-testing.jsx',
-            player: './src/playground/player.jsx'
+            player: './src/playground/player.jsx',
+            workshop: './src/playground/workshop.jsx'
         },
         output: {
             path: path.resolve(__dirname, 'build'),
@@ -271,6 +272,13 @@ const buildConfig = baseConfig.clone()
         template: 'src/playground/index.ejs',
         title: 'Scratch 3.0 GUI: Player Example'
     }))
+    .addPlugin(new HtmlWebpackPlugin({
+        ...commonHtmlWebpackPluginOptions,
+        chunks: ['workshop'],
+        filename: 'workshop.html',
+        template: 'src/playground/index.ejs',
+        title: 'Xcratch Workshop Editor'
+    }))
     .addPlugin(new CopyWebpackPlugin({
         patterns: [
             {
@@ -289,6 +297,18 @@ const buildConfig = baseConfig.clone()
 buildConfig.merge({
     devServer: {
         historyApiFallback: true,
+        // Same-origin the workshop backend in dev so the participant session cookie
+        // (SameSite=Lax) is sent on /store writes. webpack-dev-server v5 proxy form.
+        // Target defaults to the backend's default port (8000); override with
+        // WORKSHOP_API_TARGET when the backend runs elsewhere.
+        proxy: [
+            {
+                context: ['/api', '/store'],
+                target: process.env.WORKSHOP_API_TARGET || 'http://localhost:8000',
+                changeOrigin: true,
+                secure: false
+            }
+        ],
         server: {
             type: 'https',
             options: {
