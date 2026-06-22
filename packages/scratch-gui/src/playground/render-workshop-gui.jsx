@@ -38,7 +38,8 @@ const getParams = () => {
         api: (q.get('api') || '').replace(/\/$/, ''),
         nickname: q.get('nickname'),
         code: q.get('code'),
-        isPlayer: q.get('is_player') === 'true'
+        isPlayer: q.get('is_player') === 'true',
+        roomId: q.get('room_id')
     };
 };
 
@@ -75,7 +76,7 @@ const maybeJoin = async ({api, slug, nickname, code}) => {
 export default async appTarget => {
     GUI.setAppElement(appTarget);
 
-    const {slug, projectId, token, api, nickname, code, isPlayer} = getParams();
+    const {slug, projectId, token, api, nickname, code, isPlayer, roomId} = getParams();
     if (!slug) {
       log.error('Xcratch Workshop: missing required ?slug= query param');
     }
@@ -97,7 +98,7 @@ export default async appTarget => {
         // loads instead (showing "with id"), so this never double-creates.
         canCreateNew={!isPlayer}
         projectId={projectId}
-        projectHost={`${api}/store/ws/${slug}/projects`}
+        projectHost={roomId ? `${api}/store/ws/${slug}/rooms/${roomId}/projects` : `${api}/store/ws/${slug}/projects`}
         assetHost={`${api}/store/ws/${slug}/assets`}
         projectToken={token}
         onUpdateProjectId={updateProjectIdInUrl}
