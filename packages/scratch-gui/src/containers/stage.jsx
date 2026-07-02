@@ -1,4 +1,5 @@
 import bindAll from 'lodash.bindall';
+import throttle from 'lodash.throttle';
 import PropTypes from 'prop-types';
 import React from 'react';
 import Renderer from '@scratch/scratch-render';
@@ -35,6 +36,7 @@ class Stage extends React.Component {
             'onStartDrag',
             'onStopDrag',
             'onWheel',
+            'onWindowResize',
             'updateRect',
             'questionListener',
             'setDragCanvas',
@@ -137,12 +139,23 @@ class Stage extends React.Component {
         canvas.removeEventListener('wheel', this.onWheel);
     }
     attachRectEvents () {
-        window.addEventListener('resize', this.updateRect);
+        this.throttledForceUpdate = throttle(() => this.forceUpdate(), 100);
+        window.addEventListener('resize', this.onWindowResize);
         window.addEventListener('scroll', this.updateRect);
     }
     detachRectEvents () {
-        window.removeEventListener('resize', this.updateRect);
+        window.removeEventListener('resize', this.onWindowResize);
         window.removeEventListener('scroll', this.updateRect);
+        this.throttledForceUpdate.cancel();
+    }
+    onWindowResize () {
+        this.updateRect();
+        // In full-screen mode the stage dimensions are derived from the window
+        // size at render time, so rescaling needs a re-render (bypassing
+        // shouldComponentUpdate, whose inputs don't change on resize).
+        if (this.props.isFullScreen) {
+            this.throttledForceUpdate();
+        }
     }
     updateRect () {
         this.rect = this.canvas.getBoundingClientRect();

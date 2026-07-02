@@ -1,0 +1,16 @@
+/* Player (embed) mode: fill the iframe viewport with no minimum size and no
+   scrollbars, unlike index.css which enforces the full-editor 1024x640 minimum. */
+html,
+body,
+.app {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+}
+
+/* Hide the branding logo that stage-header shows in embedded mode. Attribute
+   selector because the target class lives in another CSS module. */
+[class*="embed-scratch-logo"] {
+    display: none;
+}
