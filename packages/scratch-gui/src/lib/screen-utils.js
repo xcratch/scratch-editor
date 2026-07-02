@@ -57,8 +57,12 @@ const getStageDimensions = (stageSize, isFullScreen) => {
 
         stageDimensions.width = stageDimensions.height + (stageDimensions.height / 3);
 
-        if (stageDimensions.width > window.innerWidth) {
-            stageDimensions.width = window.innerWidth;
+        // Leave room for the stage's border and padding on the left/right too,
+        // so they aren't clipped when the window is narrower than the stage.
+        const maxWidth = window.innerWidth -
+            STAGE_DIMENSION_DEFAULTS.fullScreenSpacingBorderAdjustment;
+        if (stageDimensions.width > maxWidth) {
+            stageDimensions.width = maxWidth;
             stageDimensions.height = stageDimensions.width * .75;
         }
 

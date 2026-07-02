@@ -11,7 +11,11 @@ import AppStateHOC from '../lib/app-state-hoc.jsx';
 import BrowserModalComponent from '../components/browser-modal/browser-modal.jsx';
 import supportedBrowser from '../lib/supported-browser';
 
-import styles from './index.css';
+// index.css imposes the full-editor minimum size (1024x640) on html/body, so in
+// player (embed) mode load the viewport-filling player stylesheet instead.
+const isPlayer = new URLSearchParams(window.location.search).get('is_player') === 'true';
+const cssModule = isPlayer ? require('./workshop-player.css') : require('./index.css');
+const styles = cssModule.default || cssModule;
 
 const appTarget = document.createElement('div');
 appTarget.className = styles.app;

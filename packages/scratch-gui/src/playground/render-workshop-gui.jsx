@@ -90,6 +90,10 @@ export default async appTarget => {
     root.render(
       <WrappedGui
         isPlayerOnly={isPlayer}
+        // Embedded mode = full-screen player scaled to the iframe viewport, with
+        // branding instead of an exit-full-screen button. Used by the workshop
+        // project page, which embeds this page in a small iframe.
+        isEmbedded={isPlayer}
         canEditTitle={!isPlayer}
         canSave={!isPlayer}
         // With no project_id the default project shows "without id"; canCreateNew lets
