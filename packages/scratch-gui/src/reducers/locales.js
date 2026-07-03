@@ -7,6 +7,7 @@ import xcratchCategoryTranslations from '../lib/libraries/xcratch-category-trans
 import blocksToImageTranslations from '../lib/blocks-to-image-translations.js';
 import editValueInEditorTranslations from '../lib/edit-value-in-editor-translations.js';
 import listEditorTranslations from '../lib/list-editor-translations.js';
+import localProjectTranslations from '../lib/local-project-translations.js';
 
 Object.keys(missingTranslations).forEach(locale => {
     editorMessages[locale] = {
@@ -54,6 +55,13 @@ Object.keys(listEditorTranslations).forEach(locale => {
     editorMessages[locale] = {
         ...(editorMessages[locale] || {}),
         ...listEditorTranslations[locale]
+    };
+});
+
+Object.keys(localProjectTranslations).forEach(locale => {
+    editorMessages[locale] = {
+        ...(editorMessages[locale] || {}),
+        ...localProjectTranslations[locale]
     };
 });
 

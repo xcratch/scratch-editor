@@ -20,6 +20,7 @@ import Box from '../box/box.jsx';
 import MenuBar from '../menu-bar/menu-bar.jsx';
 import CostumeLibrary from '../../containers/costume-library.jsx';
 import BackdropLibrary from '../../containers/backdrop-library.jsx';
+import ProjectLibrary from '../../containers/project-library.jsx';
 import Watermark from '../../containers/watermark.jsx';
 
 import Backpack from '../../containers/backpack.jsx';
@@ -119,6 +120,8 @@ const GUIComponent = props => {
         onProjectTelemetryEvent,
         onRequestCloseBackdropLibrary,
         onRequestCloseCostumeLibrary,
+        onRequestCloseProjectLibrary,
+        projectLibraryVisible,
         // onRequestCloseDebugModal,
         onRequestCloseTelemetryModal,
         onSeeCommunity,
@@ -270,6 +273,12 @@ const GUIComponent = props => {
                     <BackdropLibrary
                         vm={vm}
                         onRequestClose={onRequestCloseBackdropLibrary}
+                    />
+                ) : null}
+                {projectLibraryVisible ? (
+                    <ProjectLibrary
+                        canSave={canSave}
+                        onRequestClose={onRequestCloseProjectLibrary}
                     />
                 ) : null}
                 {!menuBarHidden && <MenuBar
@@ -545,6 +554,7 @@ GUIComponent.propTypes = {
     onRequestCloseBackdropLibrary: PropTypes.func,
     onRequestCloseCostumeLibrary: PropTypes.func,
     onRequestCloseDebugModal: PropTypes.func,
+    onRequestCloseProjectLibrary: PropTypes.func,
     onRequestCloseTelemetryModal: PropTypes.func,
     onSeeCommunity: PropTypes.func,
     onShare: PropTypes.func,
@@ -557,6 +567,7 @@ GUIComponent.propTypes = {
     onToggleLoginOpen: PropTypes.func,
     onUpdateProjectThumbnail: PropTypes.func,
     platform: PropTypes.oneOf(Object.keys(PLATFORM)),
+    projectLibraryVisible: PropTypes.bool,
     renderLogin: PropTypes.func,
     setTheme: PropTypes.func.isRequired,
     showComingSoon: PropTypes.bool,

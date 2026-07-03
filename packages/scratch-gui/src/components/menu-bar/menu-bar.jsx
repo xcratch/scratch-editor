@@ -30,7 +30,7 @@ import TurboMode from '../../containers/turbo-mode.jsx';
 import MenuBarHOC from '../../containers/menu-bar-hoc.jsx';
 import SettingsMenu from './settings-menu.jsx';
 
-import {openTipsLibrary, openDebugModal} from '../../reducers/modals';
+import {openTipsLibrary, openDebugModal, openProjectLibrary} from '../../reducers/modals';
 import {setPlayer} from '../../reducers/mode';
 import {
     isTimeTravel220022BC,
@@ -186,6 +186,7 @@ class MenuBar extends React.Component {
         super(props);
         bindAll(this, [
             'handleClickNew',
+            'handleClickOpenProjectLibrary',
             'handleClickRemix',
             'handleClickSave',
             'handleClickSaveAsCopy',
@@ -217,6 +218,10 @@ class MenuBar extends React.Component {
         if (readyToReplaceProject) {
             this.props.onClickNew(this.props.canSave && this.props.canCreateNew);
         }
+        this.props.onRequestCloseFile();
+    }
+    handleClickOpenProjectLibrary () {
+        this.props.onOpenProjectLibrary();
         this.props.onRequestCloseFile();
     }
     handleClickRemix () {
@@ -515,6 +520,17 @@ class MenuBar extends React.Component {
                                         </MenuSection>
                                     )}
                                     <MenuSection>
+                                        {this.props.canOpenProjectLibrary && (
+                                            <MenuItem
+                                                onClick={this.handleClickOpenProjectLibrary}
+                                            >
+                                                <FormattedMessage
+                                                    defaultMessage="Open from project list"
+                                                    description="Menu bar item for opening the list of projects saved in the browser" // eslint-disable-line max-len
+                                                    id="xcratch.menuBar.openProjectLibrary"
+                                                />
+                                            </MenuItem>
+                                        )}
                                         <MenuItem
                                             onClick={this.props.onStartSelectingFileUpload}
                                         >
@@ -951,9 +967,11 @@ MenuBar.propTypes = {
             })
         )
     ]),
+    canOpenProjectLibrary: PropTypes.bool,
     onClickAccount: PropTypes.func,
     onClickEdit: PropTypes.func,
     onClickFile: PropTypes.func,
+    onOpenProjectLibrary: PropTypes.func,
     onClickLogin: PropTypes.func,
     onClickLogo: PropTypes.func,
     onClickMode: PropTypes.func,
@@ -1009,6 +1027,7 @@ const mapStateToProps = (state, ownProps) => {
     return {
         aboutMenuOpen: aboutMenuOpen(state),
         accountMenuOpen: accountMenuOpen(state),
+        canOpenProjectLibrary: typeof state.scratchGui.config?.storage?.listProjects === 'function',
         currentLocale: state.locales.locale,
         fileMenuOpen: fileMenuOpen(state),
         editMenuOpen: editMenuOpen(state),
@@ -1072,6 +1091,7 @@ const mapDispatchToProps = (dispatch, ownProps) => ({
     onClickSettings: () => dispatch(openSettingsMenu()),
     onRequestCloseSettings: () => dispatch(closeSettingsMenu()),
     onClickNew: needSave => dispatch(requestNewProject(needSave)),
+    onOpenProjectLibrary: () => dispatch(openProjectLibrary()),
     onClickRemix: () => dispatch(remixProject()),
     onClickSave: () => dispatch(manualUpdateProject()),
     onClickSaveAsCopy: () => dispatch(saveProjectAsCopy()),
