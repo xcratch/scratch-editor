@@ -22,6 +22,7 @@ import {
 import {
     closeCostumeLibrary,
     closeBackdropLibrary,
+    closeProjectLibrary,
     closeTelemetryModal,
     openExtensionLibrary,
     closeDebugModal
@@ -177,6 +178,7 @@ const mapStateToProps = (state, ownProps) => {
         loadingStateVisible: state.scratchGui.modals.loadingProject,
         platform: ownProps.platform,
         projectId: state.scratchGui.projectState.projectId,
+        projectLibraryVisible: state.scratchGui.modals.projectLibrary,
         soundsTabVisible: state.scratchGui.editorTab.activeTabIndex === SOUNDS_TAB_INDEX,
         targetIsStage: (
             state.scratchGui.targets.stage &&
@@ -197,6 +199,7 @@ const mapDispatchToProps = dispatch => ({
     onRequestCloseBackdropLibrary: () => dispatch(closeBackdropLibrary()),
     onRequestCloseCostumeLibrary: () => dispatch(closeCostumeLibrary()),
     onRequestCloseDebugModal: () => dispatch(closeDebugModal()),
+    onRequestCloseProjectLibrary: () => dispatch(closeProjectLibrary()),
     onRequestCloseTelemetryModal: () => dispatch(closeTelemetryModal())
 });
 
