@@ -44,6 +44,7 @@ export interface StoredAsset {
 export interface ProjectVersion {
     projectId: string;
     timestamp: number;
+    parentTimestamp?: number | null;
     body: string;
     // Stage snapshot at the time of the save; patched in right after the
     // save by saveProjectThumbnail. Absent on records from older builds.

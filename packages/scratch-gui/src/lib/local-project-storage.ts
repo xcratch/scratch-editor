@@ -162,6 +162,7 @@ export interface LocalProjectListItem {
 export interface LocalProjectVersionItem {
     projectId: string;
     timestamp: number;
+    parentTimestamp?: number | null;
     thumbnail: Blob | null;
     comment?: string;
 }
@@ -283,7 +284,13 @@ export class LocalProjectStorage implements GUIStorage {
 
         await db.putBody({id, body: vmState});
         if (bodyChanged) {
-            await db.putVersion({projectId: id, timestamp: now, body: vmState, thumbnail: null});
+            let parentTs = this.lastVersionTimestamp.get(id);
+            if (parentTs === undefined) {
+                const versions = await db.listVersions(id);
+                parentTs = versions.length > 0 ? versions[0].timestamp : undefined;
+            }
+            const parentTsFinal = parentTs || null;
+            await db.putVersion({projectId: id, timestamp: now, parentTimestamp: parentTsFinal, body: vmState, thumbnail: null});
             this.lastVersionTimestamp.set(id, now);
             await this.thinVersions(id, now);
         }
@@ -415,7 +422,7 @@ export class LocalProjectStorage implements GUIStorage {
             comment: header.comment || ''
         });
         await db.putBody({id: newId, body: body.body});
-        await db.putVersion({projectId: newId, timestamp: now, body: body.body, thumbnail: header.thumbnail});
+        await db.putVersion({projectId: newId, timestamp: now, parentTimestamp: null, body: body.body, thumbnail: header.thumbnail});
         this.knownModified.set(newId, now);
         this.lastVersionTimestamp.set(newId, now);
         return {id: newId};
@@ -424,9 +431,10 @@ export class LocalProjectStorage implements GUIStorage {
     async listVersions (id: ProjectId): Promise<LocalProjectVersionItem[]> {
         const versions = await db.listVersions(String(id));
         // Drop the (large) bodies; the list view only needs metadata
-        return versions.map(({projectId, timestamp, thumbnail, comment}) => ({
+        return versions.map(({projectId, timestamp, parentTimestamp, thumbnail, comment}) => ({
             projectId,
             timestamp,
+            parentTimestamp: parentTimestamp ?? null,
             thumbnail: thumbnail ?? null,
             comment: comment || ''
         }));
@@ -453,7 +461,7 @@ export class LocalProjectStorage implements GUIStorage {
      * replaced is snapshotted first, so restoring never loses work.
      * Resolves with the restored body so the caller can load it into the VM.
      */
-    async restoreVersion (id: ProjectId, timestamp: number): Promise<string> {
+    async restoreVersion (id: ProjectId, timestamp: number, options?: {saveCurrent?: boolean}): Promise<string> {
         const idString = String(id);
         const version = await db.getVersion(idString, timestamp);
         if (!version) throw new Error(`Version not found: ${idString}@${timestamp}`);
@@ -461,12 +469,16 @@ export class LocalProjectStorage implements GUIStorage {
         const now = Date.now();
         const current = await db.getBody(idString);
         const header = await db.getHeader(idString);
-        if (current && current.body !== version.body) {
+        const shouldSaveCurrent = options?.saveCurrent !== false;
+
+        if (shouldSaveCurrent && current && current.body !== version.body) {
             // The header thumbnail captures the last saved state, i.e. the
             // body being snapshotted here.
+            const parentTs = this.lastVersionTimestamp.get(idString) || null;
             await db.putVersion({
                 projectId: idString,
                 timestamp: now,
+                parentTimestamp: parentTs,
                 body: current.body,
                 thumbnail: header ? header.thumbnail : null
             });
@@ -485,6 +497,38 @@ export class LocalProjectStorage implements GUIStorage {
         return version.body;
     }
 
+    async deleteVersion (id: ProjectId, timestamp: number): Promise<void> {
+        const idString = String(id);
+        const versions = await db.listVersions(idString);
+        const toDeleteSet = new Set([timestamp]);
+
+        const parentMap = new Map<number, number | null>();
+        for (const v of versions) {
+            parentMap.set(v.timestamp, v.parentTimestamp || null);
+        }
+
+        const getSurvivingAncestor = (ts: number): number | null => {
+            let curr = parentMap.get(ts) || null;
+            while (curr && toDeleteSet.has(curr)) {
+                curr = parentMap.get(curr) || null;
+            }
+            return curr;
+        };
+
+        const reparentPromises: Array<Promise<unknown>> = [];
+        for (const v of versions) {
+            if (v.timestamp !== timestamp) {
+                const pTs = v.parentTimestamp || null;
+                if (pTs === timestamp) {
+                    const newParent = getSurvivingAncestor(v.timestamp);
+                    reparentPromises.push(db.putVersion({ ...v, parentTimestamp: newParent }));
+                }
+            }
+        }
+        await Promise.all(reparentPromises);
+        await db.deleteVersions([[idString, timestamp]]);
+    }
+
     private resolveId (id: string): string | null {
         if (isLocalProjectId(id)) return id;
         return this.aliases.get(id) ?? null;
@@ -492,8 +536,47 @@ export class LocalProjectStorage implements GUIStorage {
 
     private async thinVersions (projectId: string, now: number): Promise<void> {
         const versions = await db.listVersions(projectId); // newest first
-        const toDelete = selectVersionsToThin(versions.map(v => v.timestamp), now);
+        let toDelete = selectVersionsToThin(versions.map(v => v.timestamp), now);
         if (toDelete.length === 0) return;
+
+        // Count children for each version to identify branch parents (versions with >= 2 children)
+        const childCounts = new Map<number, number>();
+        for (const v of versions) {
+            if (v.parentTimestamp) {
+                childCounts.set(v.parentTimestamp, (childCounts.get(v.parentTimestamp) || 0) + 1);
+            }
+        }
+
+        // Never auto-delete versions that serve as a branch parent
+        toDelete = toDelete.filter(ts => (childCounts.get(ts) || 0) < 2);
+        if (toDelete.length === 0) return;
+
+        const toDeleteSet = new Set(toDelete);
+        const parentMap = new Map<number, number | null>();
+        for (const v of versions) {
+            parentMap.set(v.timestamp, v.parentTimestamp || null);
+        }
+
+        const getSurvivingAncestor = (ts: number): number | null => {
+            let curr = parentMap.get(ts) || null;
+            while (curr && toDeleteSet.has(curr)) {
+                curr = parentMap.get(curr) || null;
+            }
+            return curr;
+        };
+
+        const reparentPromises: Array<Promise<unknown>> = [];
+        for (const v of versions) {
+            if (!toDeleteSet.has(v.timestamp)) {
+                const pTs = v.parentTimestamp || null;
+                if (pTs && toDeleteSet.has(pTs)) {
+                    const newParent = getSurvivingAncestor(v.timestamp);
+                    reparentPromises.push(db.putVersion({ ...v, parentTimestamp: newParent }));
+                }
+            }
+        }
+        await Promise.all(reparentPromises);
+
         await db.deleteVersions(toDelete.map(ts => [projectId, ts]));
         // Thinned versions may have been the last reference to some assets.
         // Sweeping parses every stored body, so throttle it.

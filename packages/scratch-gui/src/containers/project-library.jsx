@@ -42,6 +42,11 @@ const messages = defineMessages({
         id: 'xcratch.projectHistory.restoreConfirm',
         defaultMessage: 'Restore this version? The current state is saved to the history first.',
         description: 'Confirmation shown before restoring a project version'
+    },
+    deleteVersionConfirm: {
+        id: 'xcratch.projectHistory.deleteVersionConfirm',
+        defaultMessage: 'Are you sure you want to delete this version? This cannot be undone.',
+        description: 'Confirmation shown before deleting a project version'
     }
 });
 
@@ -56,14 +61,18 @@ class ProjectLibrary extends React.Component {
             'handleRestoreVersion',
             'handleSetComment',
             'handleSetVersionComment',
-            'handleShowHistory'
+            'handleShowHistory',
+            'handleConfirmRestore',
+            'handleCancelRestore',
+            'handleDeleteVersion'
         ]);
         this.state = {
             loading: true,
             projects: [],
             view: 'list',
             historyProjectId: null,
-            versions: []
+            versions: [],
+            confirmRestoreTimestamp: null
         };
         this.objectUrls = [];
         this.versionObjectUrls = [];
@@ -164,7 +173,12 @@ class ProjectLibrary extends React.Component {
                         thumbnailUrl = URL.createObjectURL(version.thumbnail);
                         this.versionObjectUrls.push(thumbnailUrl);
                     }
-                    return {timestamp: version.timestamp, thumbnailUrl, comment: version.comment || ''};
+                    return {
+                        timestamp: version.timestamp,
+                        parentTimestamp: version.parentTimestamp,
+                        thumbnailUrl,
+                        comment: version.comment || ''
+                    };
                 });
                 this.setState({
                     view: 'history',
@@ -191,11 +205,17 @@ class ProjectLibrary extends React.Component {
             .catch(err => log.error(err));
     }
     handleRestoreVersion (timestamp) {
-        // eslint-disable-next-line no-alert
-        const readyToRestore = confirm(this.props.intl.formatMessage(messages.restoreConfirm));
-        if (!readyToRestore) return;
+        this.setState({confirmRestoreTimestamp: timestamp});
+    }
+    handleCancelRestore () {
+        this.setState({confirmRestoreTimestamp: null});
+    }
+    handleConfirmRestore (saveCurrent) {
+        const timestamp = this.state.confirmRestoreTimestamp;
+        if (!timestamp) return;
+        this.setState({confirmRestoreTimestamp: null});
         const id = this.state.historyProjectId;
-        this.props.storage.restoreVersion(id, timestamp)
+        this.props.storage.restoreVersion(id, timestamp, {saveCurrent})
             .then(body => {
                 if (String(id) === String(this.props.reduxProjectId)) {
                     // The project is open: setProjectId would not refetch the
@@ -221,12 +241,41 @@ class ProjectLibrary extends React.Component {
             })
             .catch(err => log.error(err));
     }
+    handleDeleteVersion (timestamp) {
+        // eslint-disable-next-line no-alert
+        const readyToDelete = confirm(this.props.intl.formatMessage(messages.deleteVersionConfirm));
+        if (!readyToDelete) return;
+        const id = this.state.historyProjectId;
+        this.props.storage.deleteVersion(id, timestamp)
+            .then(() => {
+                this.revokeVersionObjectUrls();
+                return this.props.storage.listVersions(id);
+            })
+            .then(versions => {
+                const versionItems = versions.map(version => {
+                    let thumbnailUrl = null;
+                    if (version.thumbnail) {
+                        thumbnailUrl = URL.createObjectURL(version.thumbnail);
+                        this.versionObjectUrls.push(thumbnailUrl);
+                    }
+                    return {
+                        timestamp: version.timestamp,
+                        parentTimestamp: version.parentTimestamp,
+                        thumbnailUrl,
+                        comment: version.comment || ''
+                    };
+                });
+                this.setState({versions: versionItems});
+            })
+            .catch(err => log.error(err));
+    }
     render () {
         const project = this.state.historyProjectId === null ?
             null :
             this.state.projects.find(p => p.id === this.state.historyProjectId);
         return (
             <ProjectLibraryComponent
+                confirmRestoreTimestamp={this.state.confirmRestoreTimestamp}
                 currentProjectId={this.props.reduxProjectId}
                 historyProjectName={project ? project.name : ''}
                 loading={this.state.loading}
@@ -234,8 +283,11 @@ class ProjectLibrary extends React.Component {
                 versions={this.state.versions}
                 view={this.state.view}
                 onBackToList={this.handleBackToList}
+                onCancelRestore={this.handleCancelRestore}
+                onConfirmRestore={this.handleConfirmRestore}
                 onCopyProject={this.handleCopyProject}
                 onDeleteProject={this.handleDeleteProject}
+                onDeleteVersion={this.handleDeleteVersion}
                 onOpenProject={this.handleOpenProject}
                 onSetComment={this.handleSetComment}
                 onRequestClose={this.props.onRequestClose}

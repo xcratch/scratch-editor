@@ -7,6 +7,7 @@ import Modal from '../../containers/modal.jsx';
 import Spinner from '../spinner/spinner.jsx';
 import ProjectItem from './project-item.jsx';
 import VersionRow from './version-row.jsx';
+import {computeGraphLayout} from '../../lib/git-graph.js';
 
 import styles from './project-library.css';
 
@@ -25,13 +26,17 @@ const messages = defineMessages({
 
 const ProjectLibraryComponent = props => {
     const {
+        confirmRestoreTimestamp,
         currentProjectId,
         historyProjectName,
         intl,
         loading,
         onBackToList,
+        onCancelRestore,
+        onConfirmRestore,
         onCopyProject,
         onDeleteProject,
+        onDeleteVersion,
         onOpenProject,
         onRequestClose,
         onRestoreVersion,
@@ -76,7 +81,9 @@ const ProjectLibraryComponent = props => {
         </div>
     );
 
-    const renderHistory = () => (
+    const renderHistory = () => {
+        const graphData = computeGraphLayout(versions);
+        return (
         <div className={styles.historyContainer}>
             <div className={styles.historyHeader}>
                 <button
@@ -107,13 +114,15 @@ const ProjectLibraryComponent = props => {
                             id="xcratch.projectHistory.empty"
                         />
                     </div>
-                ) : versions.map(version => (
+                ) : versions.map((version, i) => (
                     <VersionRow
                         comment={version.comment}
                         commentPlaceholder={intl.formatMessage(messages.commentPlaceholder)}
+                        graphInfo={graphData[i]}
                         key={version.timestamp}
                         thumbnailUrl={version.thumbnailUrl}
                         timestamp={version.timestamp}
+                        onDelete={onDeleteVersion}
                         onRestore={onRestoreVersion}
                         onSetComment={onSetVersionComment}
                     />
@@ -121,6 +130,7 @@ const ProjectLibraryComponent = props => {
             </div>
         </div>
     );
+    };
 
     return (
         <Modal
@@ -130,18 +140,74 @@ const ProjectLibraryComponent = props => {
             onRequestClose={onRequestClose}
         >
             {view === 'history' ? renderHistory() : renderList()}
+            {confirmRestoreTimestamp && (
+                <div className={styles.restoreDialogOverlay}>
+                    <div className={styles.restoreDialog}>
+                        <div className={styles.restoreDialogTitle}>
+                            <FormattedMessage
+                                defaultMessage="Restore this version?"
+                                description="Title for version restore confirmation"
+                                id="xcratch.projectHistory.restoreTitle"
+                            />
+                        </div>
+                        <div className={styles.restoreDialogText}>
+                            <FormattedMessage
+                                defaultMessage="Do you want to save your current changes before restoring, or discard them?"
+                                description="Body text for version restore confirmation"
+                                id="xcratch.projectHistory.restorePrompt"
+                            />
+                        </div>
+                        <div className={styles.restoreDialogButtons}>
+                            <button
+                                className={styles.restoreButtonSave}
+                                onClick={() => onConfirmRestore(true)}
+                            >
+                                <FormattedMessage
+                                    defaultMessage="Save current state and restore"
+                                    description="Option to save current state before restoring"
+                                    id="xcratch.projectHistory.restoreSave"
+                                />
+                            </button>
+                            <button
+                                className={styles.restoreButtonDiscard}
+                                onClick={() => onConfirmRestore(false)}
+                            >
+                                <FormattedMessage
+                                    defaultMessage="Discard current state and restore"
+                                    description="Option to discard current state before restoring"
+                                    id="xcratch.projectHistory.restoreDiscard"
+                                />
+                            </button>
+                            <button
+                                className={styles.restoreButtonCancel}
+                                onClick={onCancelRestore}
+                            >
+                                <FormattedMessage
+                                    defaultMessage="Cancel"
+                                    description="Cancel restore"
+                                    id="xcratch.projectHistory.restoreCancel"
+                                />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </Modal>
     );
 };
 
 ProjectLibraryComponent.propTypes = {
+    confirmRestoreTimestamp: PropTypes.number,
     currentProjectId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
     historyProjectName: PropTypes.string,
     intl: intlShape.isRequired,
     loading: PropTypes.bool,
     onBackToList: PropTypes.func.isRequired,
+    onCancelRestore: PropTypes.func.isRequired,
+    onConfirmRestore: PropTypes.func.isRequired,
     onCopyProject: PropTypes.func.isRequired,
     onDeleteProject: PropTypes.func.isRequired,
+    onDeleteVersion: PropTypes.func.isRequired,
     onOpenProject: PropTypes.func.isRequired,
     onRequestClose: PropTypes.func.isRequired,
     onRestoreVersion: PropTypes.func.isRequired,
