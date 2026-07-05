@@ -177,7 +177,8 @@ class ProjectLibrary extends React.Component {
                         timestamp: version.timestamp,
                         parentTimestamp: version.parentTimestamp,
                         thumbnailUrl,
-                        comment: version.comment || ''
+                        comment: version.comment || '',
+                        diff: version.diff
                     };
                 });
                 this.setState({
@@ -262,7 +263,8 @@ class ProjectLibrary extends React.Component {
                         timestamp: version.timestamp,
                         parentTimestamp: version.parentTimestamp,
                         thumbnailUrl,
-                        comment: version.comment || ''
+                        comment: version.comment || '',
+                        diff: version.diff
                     };
                 });
                 this.setState({versions: versionItems});

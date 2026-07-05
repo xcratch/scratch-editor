@@ -118,6 +118,7 @@ const ProjectLibraryComponent = props => {
                     <VersionRow
                         comment={version.comment}
                         commentPlaceholder={intl.formatMessage(messages.commentPlaceholder)}
+                        diff={version.diff}
                         graphInfo={graphData[i]}
                         key={version.timestamp}
                         thumbnailUrl={version.thumbnailUrl}

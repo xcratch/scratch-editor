@@ -4,6 +4,7 @@ import defaultProject from './default-project';
 import {GUIStorage, ProjectId, TranslatorFunction} from '../gui-config';
 
 import * as db from './local-project-db';
+import {computeVersionDiff, VersionDiff} from './project-diff';
 
 const LAST_PROJECT_KEY = 'xcratch:lastLocalProjectId';
 
@@ -165,6 +166,7 @@ export interface LocalProjectVersionItem {
     parentTimestamp?: number | null;
     thumbnail: Blob | null;
     comment?: string;
+    diff?: VersionDiff;
 }
 
 export class LocalProjectStorage implements GUIStorage {
@@ -290,7 +292,8 @@ export class LocalProjectStorage implements GUIStorage {
                 parentTs = versions.length > 0 ? versions[0].timestamp : undefined;
             }
             const parentTsFinal = parentTs || null;
-            await db.putVersion({projectId: id, timestamp: now, parentTimestamp: parentTsFinal, body: vmState, thumbnail: null});
+            const diff = computeVersionDiff(currentBody ? currentBody.body : null, vmState);
+            await db.putVersion({projectId: id, timestamp: now, parentTimestamp: parentTsFinal, body: vmState, thumbnail: null, diff});
             this.lastVersionTimestamp.set(id, now);
             await this.thinVersions(id, now);
         }
@@ -431,12 +434,13 @@ export class LocalProjectStorage implements GUIStorage {
     async listVersions (id: ProjectId): Promise<LocalProjectVersionItem[]> {
         const versions = await db.listVersions(String(id));
         // Drop the (large) bodies; the list view only needs metadata
-        return versions.map(({projectId, timestamp, parentTimestamp, thumbnail, comment}) => ({
+        return versions.map(({projectId, timestamp, parentTimestamp, thumbnail, comment, diff}) => ({
             projectId,
             timestamp,
             parentTimestamp: parentTimestamp ?? null,
             thumbnail: thumbnail ?? null,
-            comment: comment || ''
+            comment: comment || '',
+            diff
         }));
     }
 
@@ -520,8 +524,12 @@ export class LocalProjectStorage implements GUIStorage {
             if (v.timestamp !== timestamp) {
                 const pTs = v.parentTimestamp || null;
                 if (pTs === timestamp) {
-                    const newParent = getSurvivingAncestor(v.timestamp);
-                    reparentPromises.push(db.putVersion({ ...v, parentTimestamp: newParent }));
+                    const newParentTs = getSurvivingAncestor(v.timestamp);
+                    const newParentObj = newParentTs ? versions.find(ver => ver.timestamp === newParentTs) : null;
+                    const oldBody = newParentObj ? newParentObj.body : null;
+                    const newDiff = computeVersionDiff(oldBody, v.body);
+                    
+                    reparentPromises.push(db.putVersion({ ...v, parentTimestamp: newParentTs, diff: newDiff }));
                 }
             }
         }
