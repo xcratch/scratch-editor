@@ -393,3 +393,35 @@
 .restore-button-cancel:hover {
     background: #e4e7eb;
 }
+
+.version-diff-container {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.25rem;
+    margin-top: 0.25rem;
+    flex-wrap: wrap;
+}
+
+.diff-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.5rem;
+    font-size: 0.65rem;
+    font-weight: bold;
+    color: white;
+}
+
+.diff-badge-code {
+    background: #4c97ff;
+}
+
+.diff-badge-assets {
+    background: #9966ff;
+}
+
+.diff-badge-sprites {
+    background: #ff6680;
+}

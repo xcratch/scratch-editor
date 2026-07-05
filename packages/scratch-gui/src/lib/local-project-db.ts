@@ -7,6 +7,8 @@
  *   versions (keyPath: [projectId, timestamp]) - historical snapshots of project.json
  */
 
+import {VersionDiff} from './project-diff';
+
 const DB_NAME = 'xcratch-local-projects';
 const DB_VERSION = 1;
 
@@ -52,6 +54,7 @@ export interface ProjectVersion {
     // Free-form user note shown in the version history view. Absent on
     // records from older builds.
     comment?: string;
+    diff?: VersionDiff;
 }
 
 let dbPromise: Promise<IDBDatabase> | null = null;

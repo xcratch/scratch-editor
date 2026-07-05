@@ -75,20 +75,42 @@ class VersionRow extends React.Component {
                             <span className={styles.versionThumbnailPlaceholder} />
                         )}
                     </span>
-                    <span className={styles.versionDate}>
-                        <FormattedDate
-                            day="2-digit"
-                            month="short"
-                            value={this.props.timestamp}
-                            year="numeric"
-                        />
-                        <FormattedTime
-                            hour="2-digit"
-                            minute="2-digit"
-                            second="2-digit"
-                            value={this.props.timestamp}
-                        />
-                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                        <span className={styles.versionDate}>
+                            <FormattedDate
+                                day="2-digit"
+                                month="short"
+                                value={this.props.timestamp}
+                                year="numeric"
+                            />
+                            <FormattedTime
+                                hour="2-digit"
+                                minute="2-digit"
+                                second="2-digit"
+                                value={this.props.timestamp}
+                            />
+                        </span>
+                        {this.props.diff && (
+                            <div className={styles.versionDiffContainer}>
+                                {this.props.diff.code && (
+                                    <span className={`${styles.diffBadge} ${styles.diffBadgeCode}`}>
+                                        <FormattedMessage defaultMessage="Code" description="Code changed" id="xcratch.projectHistory.diffCode" />
+                                    </span>
+                                )}
+                                {this.props.diff.assets && (
+                                    <span className={`${styles.diffBadge} ${styles.diffBadgeAssets}`}>
+                                        <FormattedMessage defaultMessage="Assets" description="Assets changed" id="xcratch.projectHistory.diffAssets" />
+                                    </span>
+                                )}
+                                {this.props.diff.sprites !== 0 && (
+                                    <span className={`${styles.diffBadge} ${styles.diffBadgeSprites}`}>
+                                        {this.props.diff.sprites > 0 ? `+${this.props.diff.sprites}` : this.props.diff.sprites}
+                                        {' '}<FormattedMessage defaultMessage="Sprites" description="Sprites changed" id="xcratch.projectHistory.diffSprites" />
+                                    </span>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 </span>
                 <textarea
                     className={styles.versionCommentInput}
@@ -130,6 +152,7 @@ class VersionRow extends React.Component {
 VersionRow.propTypes = {
     comment: PropTypes.string,
     commentPlaceholder: PropTypes.string,
+    diff: PropTypes.object,
     graphInfo: PropTypes.object,
     onDelete: PropTypes.func.isRequired,
     onRestore: PropTypes.func.isRequired,
