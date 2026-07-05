@@ -36,6 +36,7 @@ const ProjectLibraryComponent = props => {
         onRequestClose,
         onRestoreVersion,
         onSetComment,
+        onSetVersionComment,
         onShowHistory,
         projects,
         versions,
@@ -108,10 +109,13 @@ const ProjectLibraryComponent = props => {
                     </div>
                 ) : versions.map(version => (
                     <VersionRow
+                        comment={version.comment}
+                        commentPlaceholder={intl.formatMessage(messages.commentPlaceholder)}
                         key={version.timestamp}
                         thumbnailUrl={version.thumbnailUrl}
                         timestamp={version.timestamp}
                         onRestore={onRestoreVersion}
+                        onSetComment={onSetVersionComment}
                     />
                 ))}
             </div>
@@ -142,6 +146,7 @@ ProjectLibraryComponent.propTypes = {
     onRequestClose: PropTypes.func.isRequired,
     onRestoreVersion: PropTypes.func.isRequired,
     onSetComment: PropTypes.func.isRequired,
+    onSetVersionComment: PropTypes.func.isRequired,
     onShowHistory: PropTypes.func.isRequired,
     projects: PropTypes.arrayOf(PropTypes.shape({
         id: PropTypes.string.isRequired,
@@ -151,6 +156,7 @@ ProjectLibraryComponent.propTypes = {
         comment: PropTypes.string
     })).isRequired,
     versions: PropTypes.arrayOf(PropTypes.shape({
+        comment: PropTypes.string,
         thumbnailUrl: PropTypes.string,
         timestamp: PropTypes.number.isRequired
     })).isRequired,

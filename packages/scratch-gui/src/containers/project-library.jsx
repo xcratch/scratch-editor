@@ -55,6 +55,7 @@ class ProjectLibrary extends React.Component {
             'handleOpenProject',
             'handleRestoreVersion',
             'handleSetComment',
+            'handleSetVersionComment',
             'handleShowHistory'
         ]);
         this.state = {
@@ -163,7 +164,7 @@ class ProjectLibrary extends React.Component {
                         thumbnailUrl = URL.createObjectURL(version.thumbnail);
                         this.versionObjectUrls.push(thumbnailUrl);
                     }
-                    return {timestamp: version.timestamp, thumbnailUrl};
+                    return {timestamp: version.timestamp, thumbnailUrl, comment: version.comment || ''};
                 });
                 this.setState({
                     view: 'history',
@@ -176,6 +177,18 @@ class ProjectLibrary extends React.Component {
     handleBackToList () {
         this.revokeVersionObjectUrls();
         this.setState({view: 'list', historyProjectId: null, versions: []});
+    }
+    handleSetVersionComment (timestamp, comment) {
+        const id = this.state.historyProjectId;
+        if (!id) return;
+        this.props.storage.setVersionComment(id, timestamp, comment)
+            .then(() => {
+                this.setState(prevState => ({
+                    versions: prevState.versions.map(version =>
+                        (version.timestamp === timestamp ? {...version, comment} : version))
+                }));
+            })
+            .catch(err => log.error(err));
     }
     handleRestoreVersion (timestamp) {
         // eslint-disable-next-line no-alert
@@ -227,6 +240,7 @@ class ProjectLibrary extends React.Component {
                 onSetComment={this.handleSetComment}
                 onRequestClose={this.props.onRequestClose}
                 onRestoreVersion={this.handleRestoreVersion}
+                onSetVersionComment={this.handleSetVersionComment}
                 onShowHistory={this.handleShowHistory}
             />
         );

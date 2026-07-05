@@ -163,6 +163,7 @@ export interface LocalProjectVersionItem {
     projectId: string;
     timestamp: number;
     thumbnail: Blob | null;
+    comment?: string;
 }
 
 export class LocalProjectStorage implements GUIStorage {
@@ -423,11 +424,23 @@ export class LocalProjectStorage implements GUIStorage {
     async listVersions (id: ProjectId): Promise<LocalProjectVersionItem[]> {
         const versions = await db.listVersions(String(id));
         // Drop the (large) bodies; the list view only needs metadata
-        return versions.map(({projectId, timestamp, thumbnail}) => ({
+        return versions.map(({projectId, timestamp, thumbnail, comment}) => ({
             projectId,
             timestamp,
-            thumbnail: thumbnail ?? null
+            thumbnail: thumbnail ?? null,
+            comment: comment || ''
         }));
+    }
+
+    /*
+     * Persist the free-form note shown in the version history view.
+     * Like project comments, this is metadata and does not touch `modified`.
+     */
+    async setVersionComment (id: ProjectId, timestamp: number, comment: string): Promise<void> {
+        const version = await db.getVersion(String(id), timestamp);
+        if (!version || (version.comment || '') === comment) return;
+        version.comment = comment;
+        await db.putVersion(version);
     }
 
     async getVersionBody (id: ProjectId, timestamp: number): Promise<string | undefined> {

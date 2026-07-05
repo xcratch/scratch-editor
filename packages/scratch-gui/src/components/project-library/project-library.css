@@ -240,3 +240,24 @@
     flex-direction: row;
     gap: 0.5rem;
 }
+
+.version-comment-input {
+    flex: 1 1 auto;
+    min-width: 120px;
+    max-width: 320px;
+    padding: 0.25rem 0.375rem;
+    font-family: inherit;
+    font-size: 0.75rem;
+    color: $text-primary;
+    background: $ui-white;
+    border: 1px solid $ui-black-transparent;
+    border-radius: 0.25rem;
+    resize: vertical;
+    min-height: 1.75rem;
+    cursor: text;
+    box-sizing: border-box;
+}
+
+.version-comment-input::placeholder {
+    color: $text-primary-transparent;
+}

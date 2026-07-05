@@ -8,10 +8,27 @@ import styles from './project-library.css';
 class VersionRow extends React.Component {
     constructor (props) {
         super(props);
-        bindAll(this, ['handleClickRestore']);
+        bindAll(this, [
+            'handleClickRestore',
+            'handleCommentBlur',
+            'handleCommentClick',
+            'handleCommentKeyDown'
+        ]);
     }
     handleClickRestore () {
         this.props.onRestore(this.props.timestamp);
+    }
+    handleCommentClick (e) {
+        e.stopPropagation();
+    }
+    handleCommentBlur (e) {
+        const comment = e.target.value;
+        if (comment !== (this.props.comment || '')) {
+            this.props.onSetComment(this.props.timestamp, comment);
+        }
+    }
+    handleCommentKeyDown (e) {
+        e.stopPropagation();
     }
     render () {
         return (
@@ -43,6 +60,16 @@ class VersionRow extends React.Component {
                         />
                     </span>
                 </span>
+                <textarea
+                    className={styles.versionCommentInput}
+                    defaultValue={this.props.comment || ''}
+                    key={`vcomment-${this.props.timestamp}`}
+                    placeholder={this.props.commentPlaceholder}
+                    rows={1}
+                    onBlur={this.handleCommentBlur}
+                    onClick={this.handleCommentClick}
+                    onKeyDown={this.handleCommentKeyDown}
+                />
                 <button
                     className={styles.itemButton}
                     onClick={this.handleClickRestore}
@@ -59,7 +86,10 @@ class VersionRow extends React.Component {
 }
 
 VersionRow.propTypes = {
+    comment: PropTypes.string,
+    commentPlaceholder: PropTypes.string,
     onRestore: PropTypes.func.isRequired,
+    onSetComment: PropTypes.func.isRequired,
     thumbnailUrl: PropTypes.string,
     timestamp: PropTypes.number.isRequired
 };
