@@ -25,6 +25,8 @@ const localProjectTranslations = {
         'xcratch.projectHistory.restoreCancel': 'キャンセル',
         'xcratch.projectHistory.deleteVersion': '削除',
         'xcratch.projectHistory.deleteVersionConfirm': 'この履歴を削除しますか?この操作は元に戻せません。',
+        'xcratch.projectHistory.lock': '削除されないようにこの版をロックする',
+        'xcratch.projectHistory.unlock': 'この版のロックを解除する',
         'xcratch.projectConflict.confirm': 'このプロジェクトは別のタブで更新されています。\n' +
             'OK: このタブの内容で上書き保存する\n' +
             'キャンセル: このタブの変更を破棄して、最新の保存内容を読み込む'
@@ -53,6 +55,8 @@ const localProjectTranslations = {
         'xcratch.projectHistory.restoreCancel': 'キャンセル',
         'xcratch.projectHistory.deleteVersion': 'さくじょ',
         'xcratch.projectHistory.deleteVersionConfirm': 'このりれきをさくじょしますか?このそうさはもとにもどせません。',
+        'xcratch.projectHistory.lock': 'さくじょされないようにこのばんをロックする',
+        'xcratch.projectHistory.unlock': 'このばんのロックをかいじょする',
         'xcratch.projectConflict.confirm': 'このプロジェクトはべつのタブでこうしんされています。\n' +
             'OK: このタブのないようでうわがきほぞんする\n' +
             'キャンセル: このタブのへんこうをすてて、さいしんのほぞんないようをよみこむ'

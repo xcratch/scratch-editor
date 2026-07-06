@@ -55,6 +55,7 @@ export interface ProjectVersion {
     // records from older builds.
     comment?: string;
     diff?: VersionDiff;
+    isKeep?: boolean;
 }
 
 let dbPromise: Promise<IDBDatabase> | null = null;
