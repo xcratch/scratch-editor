@@ -61,6 +61,7 @@ class ProjectLibrary extends React.Component {
             'handleRestoreVersion',
             'handleSetComment',
             'handleSetVersionComment',
+            'handleSetVersionKeep',
             'handleShowHistory',
             'handleConfirmRestore',
             'handleCancelRestore',
@@ -178,7 +179,8 @@ class ProjectLibrary extends React.Component {
                         parentTimestamp: version.parentTimestamp,
                         thumbnailUrl,
                         comment: version.comment || '',
-                        diff: version.diff
+                        diff: version.diff,
+                        isKeep: version.isKeep || false
                     };
                 });
                 this.setState({
@@ -201,6 +203,18 @@ class ProjectLibrary extends React.Component {
                 this.setState(prevState => ({
                     versions: prevState.versions.map(version =>
                         (version.timestamp === timestamp ? {...version, comment} : version))
+                }));
+            })
+            .catch(err => log.error(err));
+    }
+    handleSetVersionKeep (timestamp, isKeep) {
+        const id = this.state.historyProjectId;
+        if (!id) return;
+        this.props.storage.setVersionKeep(id, timestamp, isKeep)
+            .then(() => {
+                this.setState(prevState => ({
+                    versions: prevState.versions.map(version =>
+                        (version.timestamp === timestamp ? {...version, isKeep} : version))
                 }));
             })
             .catch(err => log.error(err));
@@ -264,7 +278,8 @@ class ProjectLibrary extends React.Component {
                         parentTimestamp: version.parentTimestamp,
                         thumbnailUrl,
                         comment: version.comment || '',
-                        diff: version.diff
+                        diff: version.diff,
+                        isKeep: version.isKeep || false
                     };
                 });
                 this.setState({versions: versionItems});
@@ -295,6 +310,7 @@ class ProjectLibrary extends React.Component {
                 onRequestClose={this.props.onRequestClose}
                 onRestoreVersion={this.handleRestoreVersion}
                 onSetVersionComment={this.handleSetVersionComment}
+                onSetVersionKeep={this.handleSetVersionKeep}
                 onShowHistory={this.handleShowHistory}
             />
         );

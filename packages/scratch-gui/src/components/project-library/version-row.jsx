@@ -1,9 +1,23 @@
 import bindAll from 'lodash.bindall';
 import PropTypes from 'prop-types';
 import React from 'react';
-import {FormattedMessage, FormattedDate, FormattedTime} from 'react-intl';
+import {FormattedMessage, FormattedDate, FormattedTime, injectIntl, defineMessages} from 'react-intl';
 
+import intlShape from '../../lib/intlShape.js';
 import styles from './project-library.css';
+
+const messages = defineMessages({
+    lockTooltip: {
+        id: 'xcratch.projectHistory.lock',
+        defaultMessage: 'Lock this version to prevent deletion',
+        description: 'Tooltip for lock button'
+    },
+    unlockTooltip: {
+        id: 'xcratch.projectHistory.unlock',
+        defaultMessage: 'Unlock this version',
+        description: 'Tooltip for unlock button'
+    }
+});
 
 class VersionRow extends React.Component {
     constructor (props) {
@@ -13,8 +27,12 @@ class VersionRow extends React.Component {
             'handleClickDelete',
             'handleCommentBlur',
             'handleCommentClick',
-            'handleCommentKeyDown'
+            'handleCommentKeyDown',
+            'handleClickKeep'
         ]);
+    }
+    handleClickKeep () {
+        this.props.onSetKeep(this.props.timestamp, !this.props.isKeep);
     }
     handleClickRestore () {
         this.props.onRestore(this.props.timestamp);
@@ -35,6 +53,10 @@ class VersionRow extends React.Component {
         e.stopPropagation();
     }
     render () {
+        const titleText = this.props.intl.formatMessage(
+            this.props.isKeep ? messages.unlockTooltip : messages.lockTooltip
+        );
+
         let svgWidth = 40;
         if (this.props.graphInfo) {
             const maxCol = Math.max(
@@ -125,6 +147,24 @@ class VersionRow extends React.Component {
                 <div className={styles.versionActions}>
                     <button
                         className={styles.itemButton}
+                        onClick={this.handleClickKeep}
+                        title={titleText}
+                        style={{display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.4rem'}}
+                    >
+                        {this.props.isKeep ? (
+                            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                            </svg>
+                        ) : (
+                            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" style={{opacity: 0.5}}>
+                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+                            </svg>
+                        )}
+                    </button>
+                    <button
+                        className={styles.itemButton}
                         onClick={this.handleClickRestore}
                     >
                         <FormattedMessage
@@ -135,7 +175,9 @@ class VersionRow extends React.Component {
                     </button>
                     <button
                         className={styles.deleteVersionButton}
-                        onClick={this.handleClickDelete}
+                        disabled={this.props.isKeep}
+                        style={this.props.isKeep ? {opacity: 0.5, cursor: 'not-allowed'} : {}}
+                        onClick={this.props.isKeep ? undefined : this.handleClickDelete}
                     >
                         <FormattedMessage
                             defaultMessage="Delete"
@@ -154,11 +196,14 @@ VersionRow.propTypes = {
     commentPlaceholder: PropTypes.string,
     diff: PropTypes.object,
     graphInfo: PropTypes.object,
+    intl: intlShape.isRequired,
+    isKeep: PropTypes.bool,
     onDelete: PropTypes.func.isRequired,
     onRestore: PropTypes.func.isRequired,
     onSetComment: PropTypes.func.isRequired,
+    onSetKeep: PropTypes.func.isRequired,
     thumbnailUrl: PropTypes.string,
     timestamp: PropTypes.number.isRequired
 };
 
-export default VersionRow;
+export default injectIntl(VersionRow);

@@ -42,6 +42,7 @@ const ProjectLibraryComponent = props => {
         onRestoreVersion,
         onSetComment,
         onSetVersionComment,
+        onSetVersionKeep,
         onShowHistory,
         projects,
         versions,
@@ -120,12 +121,14 @@ const ProjectLibraryComponent = props => {
                         commentPlaceholder={intl.formatMessage(messages.commentPlaceholder)}
                         diff={version.diff}
                         graphInfo={graphData[i]}
+                        isKeep={version.isKeep}
                         key={version.timestamp}
                         thumbnailUrl={version.thumbnailUrl}
                         timestamp={version.timestamp}
                         onDelete={onDeleteVersion}
                         onRestore={onRestoreVersion}
                         onSetComment={onSetVersionComment}
+                        onSetKeep={onSetVersionKeep}
                     />
                 ))}
             </div>
@@ -214,6 +217,7 @@ ProjectLibraryComponent.propTypes = {
     onRestoreVersion: PropTypes.func.isRequired,
     onSetComment: PropTypes.func.isRequired,
     onSetVersionComment: PropTypes.func.isRequired,
+    onSetVersionKeep: PropTypes.func.isRequired,
     onShowHistory: PropTypes.func.isRequired,
     projects: PropTypes.arrayOf(PropTypes.shape({
         id: PropTypes.string.isRequired,
@@ -225,7 +229,8 @@ ProjectLibraryComponent.propTypes = {
     versions: PropTypes.arrayOf(PropTypes.shape({
         comment: PropTypes.string,
         thumbnailUrl: PropTypes.string,
-        timestamp: PropTypes.number.isRequired
+        timestamp: PropTypes.number.isRequired,
+        isKeep: PropTypes.bool
     })).isRequired,
     view: PropTypes.oneOf(['list', 'history']).isRequired
 };

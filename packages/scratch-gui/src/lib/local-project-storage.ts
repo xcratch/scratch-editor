@@ -167,6 +167,7 @@ export interface LocalProjectVersionItem {
     thumbnail: Blob | null;
     comment?: string;
     diff?: VersionDiff;
+    isKeep?: boolean;
 }
 
 export class LocalProjectStorage implements GUIStorage {
@@ -434,13 +435,14 @@ export class LocalProjectStorage implements GUIStorage {
     async listVersions (id: ProjectId): Promise<LocalProjectVersionItem[]> {
         const versions = await db.listVersions(String(id));
         // Drop the (large) bodies; the list view only needs metadata
-        return versions.map(({projectId, timestamp, parentTimestamp, thumbnail, comment, diff}) => ({
+        return versions.map(({projectId, timestamp, parentTimestamp, thumbnail, comment, diff, isKeep}) => ({
             projectId,
             timestamp,
             parentTimestamp: parentTimestamp ?? null,
             thumbnail: thumbnail ?? null,
             comment: comment || '',
-            diff
+            diff,
+            isKeep: isKeep || false
         }));
     }
 
@@ -452,6 +454,17 @@ export class LocalProjectStorage implements GUIStorage {
         const version = await db.getVersion(String(id), timestamp);
         if (!version || (version.comment || '') === comment) return;
         version.comment = comment;
+        await db.putVersion(version);
+    }
+
+    /*
+     * Persist the keep status of a version. A kept version cannot be automatically
+     * or manually deleted.
+     */
+    async setVersionKeep (id: ProjectId, timestamp: number, isKeep: boolean): Promise<void> {
+        const version = await db.getVersion(String(id), timestamp);
+        if (!version || Boolean(version.isKeep) === isKeep) return;
+        version.isKeep = isKeep;
         await db.putVersion(version);
     }
 
@@ -504,6 +517,13 @@ export class LocalProjectStorage implements GUIStorage {
     async deleteVersion (id: ProjectId, timestamp: number): Promise<void> {
         const idString = String(id);
         const versions = await db.listVersions(idString);
+        
+        const targetVersion = versions.find(v => v.timestamp === timestamp);
+        if (!targetVersion) return;
+        if (targetVersion.isKeep) {
+            throw new Error(`Cannot delete version ${idString}@${timestamp} because it is kept`);
+        }
+
         const toDeleteSet = new Set([timestamp]);
 
         const parentMap = new Map<number, number | null>();
@@ -555,8 +575,12 @@ export class LocalProjectStorage implements GUIStorage {
             }
         }
 
-        // Never auto-delete versions that serve as a branch parent
-        toDelete = toDelete.filter(ts => (childCounts.get(ts) || 0) < 2);
+        // Never auto-delete versions that serve as a branch parent, or that are marked as kept
+        toDelete = toDelete.filter(ts => {
+            const version = versions.find(v => v.timestamp === ts);
+            if (version && version.isKeep) return false;
+            return (childCounts.get(ts) || 0) < 2;
+        });
         if (toDelete.length === 0) return;
 
         const toDeleteSet = new Set(toDelete);
