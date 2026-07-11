@@ -17,6 +17,10 @@ import log from '../lib/log.js';
  *   slug        (required) workshop slug
  *   project_id  (optional) load an existing project; omit for a new project
  *   token       (optional) projectToken for token-based reads
+ *   mode        (optional) 'edit' (default) or 'remix'. In remix mode the project is
+ *               opened read-only with the Remix button enabled (Scratch's "see inside
+ *               someone else's project" experience); saving is only possible through
+ *               remixing, which POSTs a new project with ?original_id=.
  *   api         (optional) API origin; default '' = relative (same-origin via dev proxy)
  *   nickname,code (optional, dev convenience) self-join before rendering to obtain
  *                 the participant cookie, so save works from a single URL.
@@ -39,7 +43,9 @@ const getParams = () => {
         nickname: q.get('nickname'),
         code: q.get('code'),
         isPlayer: q.get('is_player') === 'true',
-        roomId: q.get('room_id')
+        roomId: q.get('room_id'),
+        // Unknown values fall back to 'edit' so existing URLs keep working.
+        mode: q.get('mode') === 'remix' ? 'remix' : 'edit'
     };
 };
 
@@ -50,6 +56,15 @@ const updateProjectIdInUrl = id => {
     const url = new URL(window.location.href);
     url.searchParams.set('project_id', String(id));
     window.history.replaceState(null, '', url.toString());
+    // replaceState only changes this iframe's URL; the embedding workshop page cannot
+    // see it, so it would keep pointing at the pre-remix project. Notify the parent so
+    // it can switch to the newly created project (same-origin proxy setup, so '*' is fine).
+    if (window.parent !== window) {
+        window.parent.postMessage({
+            type: 'xcratch-workshop:project-id-updated',
+            projectId: String(id)
+        }, '*');
+    }
 };
 
 const onClickLogo = () => {
@@ -76,10 +91,18 @@ const maybeJoin = async ({api, slug, nickname, code}) => {
 export default async appTarget => {
     GUI.setAppElement(appTarget);
 
-    const {slug, projectId, token, api, nickname, code, isPlayer, roomId} = getParams();
+    const {slug, projectId, token, api, nickname, code, isPlayer, roomId, mode} = getParams();
     if (!slug) {
       log.error('Xcratch Workshop: missing required ?slug= query param');
     }
+
+    // Scratch-style split: your own project saves in place (no remix button); someone
+    // else's project is read-only with only the Remix button (mode=remix, set by the
+    // workshop page based on the project's `editable` flag). canCreateNew must be off
+    // in remix mode too, or the saver would auto-create an empty project.
+    const isRemixMode = mode === 'remix';
+    const canSave = !isPlayer && !isRemixMode;
+    const canRemix = !isPlayer && isRemixMode;
 
     await maybeJoin({api, slug, nickname, code});
 
@@ -94,13 +117,14 @@ export default async appTarget => {
         // branding instead of an exit-full-screen button. Used by the workshop
         // project page, which embeds this page in a small iframe.
         isEmbedded={isPlayer}
-        canEditTitle={!isPlayer}
-        canSave={!isPlayer}
+        canEditTitle={canSave}
+        canSave={canSave}
+        canRemix={canRemix}
         // With no project_id the default project shows "without id"; canCreateNew lets
         // the saver auto-create it on the server (POST) → redux projectId set →
         // onUpdateProjectId reflects the new id into the URL. With a project_id it
         // loads instead (showing "with id"), so this never double-creates.
-        canCreateNew={!isPlayer}
+        canCreateNew={canSave}
         projectId={projectId}
         projectHost={roomId ? `${api}/store/ws/${slug}/rooms/${roomId}/projects` : `${api}/store/ws/${slug}/projects`}
         assetHost={`${api}/store/ws/${slug}/assets`}
