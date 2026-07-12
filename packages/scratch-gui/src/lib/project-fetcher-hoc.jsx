@@ -43,6 +43,7 @@ const ProjectFetcherHOC = function (WrappedComponent) {
             storage.setProjectToken?.(props.projectToken);
             storage.setAssetHost?.(props.assetHost);
             storage.setTranslatorFunction?.(props.intl.formatMessage);
+            storage.setVersionOverride?.(props.versionTimestamp ?? null);
 
             // props.projectId might be unset, in which case we use our default;
             // or it may be set by an even higher HOC, and passed to us.
@@ -67,6 +68,9 @@ const ProjectFetcherHOC = function (WrappedComponent) {
             }
             if (prevProps.assetHost !== this.props.assetHost) {
                 storage.setAssetHost?.(this.props.assetHost);
+            }
+            if (prevProps.versionTimestamp !== this.props.versionTimestamp) {
+                storage.setVersionOverride?.(this.props.versionTimestamp ?? null);
             }
             if (this.props.isFetchingWithId && !prevProps.isFetchingWithId) {
                 this.fetchProject(this.props.reduxProjectId, this.props.loadingState);
@@ -113,8 +117,9 @@ const ProjectFetcherHOC = function (WrappedComponent) {
                 projectToken,
                 reduxProjectId,
                 setProjectId: setProjectIdProp,
-                 
+
                 isFetchingWithId: isFetchingWithIdProp,
+                versionTimestamp,
                 ...componentProps
             } = this.props;
             return (
@@ -143,7 +148,8 @@ const ProjectFetcherHOC = function (WrappedComponent) {
         projectToken: PropTypes.string,
         projectId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
         reduxProjectId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-        setProjectId: PropTypes.func
+        setProjectId: PropTypes.func,
+        versionTimestamp: PropTypes.number
     };
     ProjectFetcherComponent.defaultProps = {
         assetHost: 'https://assets.scratch.mit.edu',

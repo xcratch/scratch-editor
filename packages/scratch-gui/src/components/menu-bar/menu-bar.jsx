@@ -524,11 +524,19 @@ class MenuBar extends React.Component {
                                             <MenuItem
                                                 onClick={this.handleClickOpenProjectLibrary}
                                             >
-                                                <FormattedMessage
-                                                    defaultMessage="Open from project list"
-                                                    description="Menu bar item for opening the list of projects saved in the browser" // eslint-disable-line max-len
-                                                    id="xcratch.menuBar.openProjectLibrary"
-                                                />
+                                                {this.props.hasProjectList ? (
+                                                    <FormattedMessage
+                                                        defaultMessage="Open from project list"
+                                                        description="Menu bar item for opening the list of projects saved in the browser" // eslint-disable-line max-len
+                                                        id="xcratch.menuBar.openProjectLibrary"
+                                                    />
+                                                ) : (
+                                                    <FormattedMessage
+                                                        defaultMessage="View history"
+                                                        description="Menu bar item for opening the version history of the current project (workshop mode, no project list)" // eslint-disable-line max-len
+                                                        id="xcratch.menuBar.openProjectHistory"
+                                                    />
+                                                )}
                                             </MenuItem>
                                         )}
                                         <MenuItem
@@ -968,6 +976,7 @@ MenuBar.propTypes = {
         )
     ]),
     canOpenProjectLibrary: PropTypes.bool,
+    hasProjectList: PropTypes.bool,
     onClickAccount: PropTypes.func,
     onClickEdit: PropTypes.func,
     onClickFile: PropTypes.func,
@@ -1027,7 +1036,9 @@ const mapStateToProps = (state, ownProps) => {
     return {
         aboutMenuOpen: aboutMenuOpen(state),
         accountMenuOpen: accountMenuOpen(state),
-        canOpenProjectLibrary: typeof state.scratchGui.config?.storage?.listProjects === 'function',
+        canOpenProjectLibrary: typeof state.scratchGui.config?.storage?.listProjects === 'function' ||
+            typeof state.scratchGui.config?.storage?.listVersions === 'function',
+        hasProjectList: typeof state.scratchGui.config?.storage?.listProjects === 'function',
         currentLocale: state.locales.locale,
         fileMenuOpen: fileMenuOpen(state),
         editMenuOpen: editMenuOpen(state),

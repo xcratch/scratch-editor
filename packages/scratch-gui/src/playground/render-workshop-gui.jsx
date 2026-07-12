@@ -4,6 +4,7 @@ import ReactDomClient from 'react-dom/client';
 import AppStateHOC from '../lib/app-state-hoc.jsx';
 import GUI from '../containers/gui.jsx';
 import log from '../lib/log.js';
+import {workshopConfigFactory} from '../workshop-config';
 
 /*
  * Xcratch Workshop launch adapter (spec §7).
@@ -22,6 +23,11 @@ import log from '../lib/log.js';
  *               someone else's project" experience); saving is only possible through
  *               remixing, which POSTs a new project with ?original_id=.
  *   api         (optional) API origin; default '' = relative (same-origin via dev proxy)
+ *   version     (optional) epoch-ms timestamp of a saved version (Phase 3 project
+ *               history). When present, the editor loads that version's body
+ *               instead of the current one and is forced read-only (canSave=false),
+ *               regardless of mode/is_player, since saving here must never
+ *               overwrite the live project with old content.
  *   nickname,code (optional, dev convenience) self-join before rendering to obtain
  *                 the participant cookie, so save works from a single URL.
  */
@@ -45,7 +51,10 @@ const getParams = () => {
         isPlayer: q.get('is_player') === 'true',
         roomId: q.get('room_id'),
         // Unknown values fall back to 'edit' so existing URLs keep working.
-        mode: q.get('mode') === 'remix' ? 'remix' : 'edit'
+        mode: q.get('mode') === 'remix' ? 'remix' : 'edit',
+        // Version history (Phase 3): epoch-ms timestamp of a saved version, or
+        // null for the project's current (live) body.
+        version: q.get('version') ? Number(q.get('version')) : null
     };
 };
 
@@ -77,23 +86,23 @@ const onClickLogo = () => {
 const maybeJoin = async ({api, slug, nickname, code}) => {
     if (!nickname || !code) return;
     try {
-      await fetch(`${api}/api/workshops/${slug}/join`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({displayName: nickname, code})
-      });
+        await fetch(`${api}/api/workshops/${slug}/join`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({displayName: nickname, code})
+        });
     } catch (e) {
-      log.error('workshop join failed', e);
+        log.error('workshop join failed', e);
     }
 };
 
 export default async appTarget => {
     GUI.setAppElement(appTarget);
 
-    const {slug, projectId, token, api, nickname, code, isPlayer, roomId, mode} = getParams();
+    const {slug, projectId, token, api, nickname, code, isPlayer, roomId, mode, version} = getParams();
     if (!slug) {
-      log.error('Xcratch Workshop: missing required ?slug= query param');
+        log.error('Xcratch Workshop: missing required ?slug= query param');
     }
 
     // Scratch-style split: your own project saves in place (no remix button); someone
@@ -101,37 +110,43 @@ export default async appTarget => {
     // workshop page based on the project's `editable` flag). canCreateNew must be off
     // in remix mode too, or the saver would auto-create an empty project.
     const isRemixMode = mode === 'remix';
-    const canSave = !isPlayer && !isRemixMode;
-    const canRemix = !isPlayer && isRemixMode;
+    const isVersionView = version !== null;
+    // Viewing a past version is always read-only: never let a save from this view
+    // silently overwrite the live project with old content.
+    const canSave = !isPlayer && !isRemixMode && !isVersionView;
+    const canRemix = !isPlayer && isRemixMode && !isVersionView;
 
     await maybeJoin({api, slug, nickname, code});
 
-    const WrappedGui = AppStateHOC(GUI);
+    const WrappedGui = AppStateHOC(GUI, false, workshopConfigFactory);
 
     const root = ReactDomClient.createRoot(appTarget);
 
     root.render(
-      <WrappedGui
-        isPlayerOnly={isPlayer}
-        // Embedded mode = full-screen player scaled to the iframe viewport, with
-        // branding instead of an exit-full-screen button. Used by the workshop
-        // project page, which embeds this page in a small iframe.
-        isEmbedded={isPlayer}
-        canEditTitle={canSave}
-        canSave={canSave}
-        canRemix={canRemix}
-        // With no project_id the default project shows "without id"; canCreateNew lets
-        // the saver auto-create it on the server (POST) → redux projectId set →
-        // onUpdateProjectId reflects the new id into the URL. With a project_id it
-        // loads instead (showing "with id"), so this never double-creates.
-        canCreateNew={canSave}
-        projectId={projectId}
-        projectHost={roomId ? `${api}/store/ws/${slug}/rooms/${roomId}/projects` : `${api}/store/ws/${slug}/projects`}
-        assetHost={`${api}/store/ws/${slug}/assets`}
-        projectToken={token}
-        onUpdateProjectId={updateProjectIdInUrl}
-        onClickLogo={onClickLogo}
-        enableCommunity={false}
-      />
+        <WrappedGui
+            isPlayerOnly={isPlayer}
+            // Embedded mode = full-screen player scaled to the iframe viewport, with
+            // branding instead of an exit-full-screen button. Used by the workshop
+            // project page, which embeds this page in a small iframe.
+            isEmbedded={isPlayer}
+            canEditTitle={canSave}
+            canSave={canSave}
+            canRemix={canRemix}
+            // With no project_id the default project shows "without id"; canCreateNew lets
+            // the saver auto-create it on the server (POST) → redux projectId set →
+            // onUpdateProjectId reflects the new id into the URL. With a project_id it
+            // loads instead (showing "with id"), so this never double-creates.
+            canCreateNew={canSave}
+            projectId={projectId}
+            projectHost={roomId ?
+                `${api}/store/ws/${slug}/rooms/${roomId}/projects` :
+                `${api}/store/ws/${slug}/projects`}
+            assetHost={`${api}/store/ws/${slug}/assets`}
+            projectToken={token}
+            versionTimestamp={version}
+            onUpdateProjectId={updateProjectIdInUrl}
+            onClickLogo={onClickLogo}
+            enableCommunity={false}
+        />
     );
 };

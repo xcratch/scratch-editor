@@ -58,6 +58,8 @@ class ProjectLibrary extends React.Component {
             'handleCopyProject',
             'handleDeleteProject',
             'handleOpenProject',
+            'handlePlayVersion',
+            'handleSeeInsideVersion',
             'handleRestoreVersion',
             'handleSetComment',
             'handleSetVersionComment',
@@ -70,16 +72,34 @@ class ProjectLibrary extends React.Component {
         this.state = {
             loading: true,
             projects: [],
+            // 'list' is meaningless when the storage has no listProjects (workshop
+            // mode): componentDidMount jumps straight to 'history' in that case.
             view: 'list',
             historyProjectId: null,
             versions: [],
+            // Whether the current viewer may keep/restore/delete versions or edit
+            // comments. Defaults to true so LocalProjectStorage (which has no
+            // canManageVersions method - the author always has full control) keeps
+            // its existing behavior; set from listVersions()'s canManage flag
+            // for storages that support it (WorkshopProjectStorage).
+            canManage: true,
             confirmRestoreTimestamp: null
         };
         this.objectUrls = [];
         this.versionObjectUrls = [];
     }
     componentDidMount () {
-        this.loadProjects();
+        const storage = this.props.storage;
+        if (typeof storage.listProjects === 'function') {
+            this.loadProjects();
+            return;
+        }
+        if (typeof storage.listVersions === 'function') {
+            // Workshop mode: there is no project list (the embedded editor only
+            // ever shows one project), so open straight to its history view.
+            this.setState({loading: false});
+            this.handleShowHistory(this.props.reduxProjectId);
+        }
     }
     componentWillUnmount () {
         this.revokeObjectUrls();
@@ -94,6 +114,10 @@ class ProjectLibrary extends React.Component {
         this.versionObjectUrls = [];
     }
     loadProjects () {
+        if (typeof this.props.storage.listProjects !== 'function') {
+            this.setState({loading: false, projects: []});
+            return;
+        }
         this.setState({loading: true});
         return this.props.storage.listProjects()
             .then(headers => {
@@ -136,6 +160,7 @@ class ProjectLibrary extends React.Component {
         this.props.onRequestClose();
     }
     handleCopyProject (id) {
+        if (typeof this.props.storage.duplicateProject !== 'function') return;
         const project = this.state.projects.find(p => p.id === id);
         const copyName = this.props.intl.formatMessage(
             messages.copyName, {projectName: project ? project.name : id});
@@ -144,6 +169,7 @@ class ProjectLibrary extends React.Component {
             .catch(err => log.error(err));
     }
     handleSetComment (id, comment) {
+        if (typeof this.props.storage.setProjectComment !== 'function') return;
         this.props.storage.setProjectComment(id, comment)
             .then(() => {
                 // Keep local state in sync without reloading the whole list
@@ -155,6 +181,7 @@ class ProjectLibrary extends React.Component {
             .catch(err => log.error(err));
     }
     handleDeleteProject (id) {
+        if (typeof this.props.storage.deleteProject !== 'function') return;
         const project = this.state.projects.find(p => p.id === id);
         // eslint-disable-next-line no-alert
         const readyToDelete = confirm(this.props.intl.formatMessage(
@@ -165,6 +192,7 @@ class ProjectLibrary extends React.Component {
             .catch(err => log.error(err));
     }
     handleShowHistory (id) {
+        if (typeof this.props.storage.listVersions !== 'function') return;
         this.props.storage.listVersions(id)
             .then(versions => {
                 this.revokeVersionObjectUrls();
@@ -183,13 +211,33 @@ class ProjectLibrary extends React.Component {
                         isKeep: version.isKeep || false
                     };
                 });
+                // LocalProjectStorage has no canManageVersions method: the author
+                // always has full control there, so default to true.
+                const canManage = typeof this.props.storage.canManageVersions === 'function' ?
+                    this.props.storage.canManageVersions(id) :
+                    true;
                 this.setState({
                     view: 'history',
                     historyProjectId: id,
-                    versions: versionItems
+                    versions: versionItems,
+                    canManage
                 });
             })
             .catch(err => log.error(err));
+    }
+    handlePlayVersion (timestamp) {
+        if (typeof this.props.storage.getVersionPlayerUrl !== 'function') return;
+        const id = this.state.historyProjectId;
+        if (!id) return;
+        const url = this.props.storage.getVersionPlayerUrl(id, timestamp);
+        window.open(url, '_blank', 'noopener');
+    }
+    handleSeeInsideVersion (timestamp) {
+        if (typeof this.props.storage.getVersionEditorUrl !== 'function') return;
+        const id = this.state.historyProjectId;
+        if (!id) return;
+        const url = this.props.storage.getVersionEditorUrl(id, timestamp);
+        window.open(url, '_blank', 'noopener');
     }
     handleBackToList () {
         this.revokeVersionObjectUrls();
@@ -197,7 +245,7 @@ class ProjectLibrary extends React.Component {
     }
     handleSetVersionComment (timestamp, comment) {
         const id = this.state.historyProjectId;
-        if (!id) return;
+        if (!id || typeof this.props.storage.setVersionComment !== 'function') return;
         this.props.storage.setVersionComment(id, timestamp, comment)
             .then(() => {
                 this.setState(prevState => ({
@@ -209,7 +257,7 @@ class ProjectLibrary extends React.Component {
     }
     handleSetVersionKeep (timestamp, isKeep) {
         const id = this.state.historyProjectId;
-        if (!id) return;
+        if (!id || typeof this.props.storage.setVersionKeep !== 'function') return;
         this.props.storage.setVersionKeep(id, timestamp, isKeep)
             .then(() => {
                 this.setState(prevState => ({
@@ -230,6 +278,7 @@ class ProjectLibrary extends React.Component {
         if (!timestamp) return;
         this.setState({confirmRestoreTimestamp: null});
         const id = this.state.historyProjectId;
+        if (typeof this.props.storage.restoreVersion !== 'function') return;
         this.props.storage.restoreVersion(id, timestamp, {saveCurrent})
             .then(body => {
                 if (String(id) === String(this.props.reduxProjectId)) {
@@ -257,6 +306,7 @@ class ProjectLibrary extends React.Component {
             .catch(err => log.error(err));
     }
     handleDeleteVersion (timestamp) {
+        if (typeof this.props.storage.deleteVersion !== 'function') return;
         // eslint-disable-next-line no-alert
         const readyToDelete = confirm(this.props.intl.formatMessage(messages.deleteVersionConfirm));
         if (!readyToDelete) return;
@@ -287,14 +337,22 @@ class ProjectLibrary extends React.Component {
             .catch(err => log.error(err));
     }
     render () {
+        const storage = this.props.storage;
         const project = this.state.historyProjectId === null ?
             null :
             this.state.projects.find(p => p.id === this.state.historyProjectId);
+        // In workshop mode there is no project list to look up a name from;
+        // fall back to the redux project title (kept in sync by titled-hoc).
+        const historyProjectName = project ? project.name : (this.props.currentProjectTitle || '');
         return (
             <ProjectLibraryComponent
+                canManageVersions={this.state.canManage}
+                canPlayVersion={typeof storage.getVersionPlayerUrl === 'function'}
+                canSeeInsideVersion={typeof storage.getVersionEditorUrl === 'function'}
                 confirmRestoreTimestamp={this.state.confirmRestoreTimestamp}
                 currentProjectId={this.props.reduxProjectId}
-                historyProjectName={project ? project.name : ''}
+                historyProjectName={historyProjectName}
+                listAvailable={typeof storage.listProjects === 'function'}
                 loading={this.state.loading}
                 projects={this.state.projects}
                 versions={this.state.versions}
@@ -306,6 +364,8 @@ class ProjectLibrary extends React.Component {
                 onDeleteProject={this.handleDeleteProject}
                 onDeleteVersion={this.handleDeleteVersion}
                 onOpenProject={this.handleOpenProject}
+                onPlayVersion={this.handlePlayVersion}
+                onSeeInsideVersion={this.handleSeeInsideVersion}
                 onSetComment={this.handleSetComment}
                 onRequestClose={this.props.onRequestClose}
                 onRestoreVersion={this.handleRestoreVersion}
@@ -319,6 +379,7 @@ class ProjectLibrary extends React.Component {
 
 ProjectLibrary.propTypes = {
     canSave: PropTypes.bool,
+    currentProjectTitle: PropTypes.string,
     intl: intlShape.isRequired,
     loadingState: PropTypes.string,
     onLoadingFinished: PropTypes.func.isRequired,
@@ -332,6 +393,7 @@ ProjectLibrary.propTypes = {
 };
 
 const mapStateToProps = state => ({
+    currentProjectTitle: state.scratchGui.projectTitle,
     loadingState: state.scratchGui.projectState.loadingState,
     projectChanged: state.scratchGui.projectChanged,
     reduxProjectId: state.scratchGui.projectState.projectId,
