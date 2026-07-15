@@ -402,6 +402,13 @@ class Runtime extends EventEmitter {
          */
         this.origin = null;
 
+        /**
+         * Handler attached by the host (e.g. scratch-gui) which saves a new
+         * project history version on request. Set via `attachProjectSaveHandler`.
+         * @type {?Function}
+         */
+        this._projectSaveHandler = null;
+
         this._initScratchLink();
 
         this.resetRunId();
@@ -1657,6 +1664,32 @@ class Runtime extends EventEmitter {
         this.storage = storage;
         fetchWithTimeout.setFetch(storage.scratchFetch.scratchFetch);
         this.resetRunId();
+    }
+
+    /**
+     * Attach the project save handler, which lets the host (e.g. scratch-gui)
+     * save a project history version on request from `saveProjectVersion`.
+     * @param {?Function} handler The handler to attach, or null to detach.
+     */
+    attachProjectSaveHandler (handler) {
+        this._projectSaveHandler = handler || null;
+    }
+
+    /**
+     * Request that the host save a new project history version, e.g. from an
+     * extension block.
+     * @param {?string} comment A comment to attach to the new version.
+     * @param {?boolean} isKeep Whether the new version should be protected from
+     * automatic thinning.
+     * @returns {Promise} Promise that resolves with the result of the save, or
+     * rejects if the current host does not support saving project versions.
+     */
+    saveProjectVersion (comment, isKeep) {
+        if (!this._projectSaveHandler) {
+            return Promise.reject(new Error(
+                'saveProjectVersion is not supported by the current host (no save handler attached)'));
+        }
+        return this._projectSaveHandler(String(comment || ''), Boolean(isKeep));
     }
 
     // -----------------------------------------------------------------------------

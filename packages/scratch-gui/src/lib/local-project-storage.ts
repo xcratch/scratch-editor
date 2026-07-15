@@ -192,6 +192,11 @@ export class LocalProjectStorage implements GUIStorage {
     // patched onto this version then.
     private readonly lastVersionTimestamp = new Map<string, number>();
     private lastGcTime = 0;
+    // Per project id, the tail of the chain of in-flight writes. Used to
+    // serialize read-modify-write sequences (header/version updates) so an
+    // autosave and a forced saveVersionWithMeta targeting the same project
+    // can never interleave.
+    private readonly pendingWrites = new Map<string, Promise<unknown>>();
 
     constructor () {
         this.cacheDefaultProject();
@@ -240,35 +245,14 @@ export class LocalProjectStorage implements GUIStorage {
         const aliasedId = aliasKey === null ? null : this.aliases.get(aliasKey);
         const isCreate = Boolean(params.isCopy) || Boolean(params.isRemix) || (!hasLocalId && !aliasedId);
 
-        const now = Date.now();
-        let id: string;
-        if (isCreate) {
-            id = await generateProjectId();
-            await db.putHeader({
-                id,
-                name: params.title || this.currentTitle || 'Untitled',
-                thumbnail: null,
-                comment: '',
-                created: now,
-                modified: now
-            });
-            if (aliasKey !== null && !params.isCopy && !params.isRemix) {
-                this.aliases.set(aliasKey, id);
-            }
-        } else {
-            id = hasLocalId ? (idString as string) : (aliasedId as string);
-            const header = await db.getHeader(id);
-            if (header) {
-                header.modified = now;
-                // Sync the name with the current redux title: a save always
-                // happens while the project is being edited, and some title
-                // changes (e.g. from an .sb3 upload filename) arrive during
-                // loading states where the rename HOC doesn't persist them.
-                const newName = params.title || this.currentTitle;
-                if (newName) header.name = newName;
-                await db.putHeader(header);
-            } else {
-                // Header vanished (e.g. deleted in another tab): recreate it
+        // Id resolution/creation happens outside the queue: a brand new id is
+        // not yet known to any other writer, and resolving an alias is a
+        // synchronous map lookup.
+        const id = isCreate ? await generateProjectId() : (hasLocalId ? (idString as string) : (aliasedId as string));
+
+        return this.enqueueWrite(id, async () => {
+            const now = Date.now();
+            if (isCreate) {
                 await db.putHeader({
                     id,
                     name: params.title || this.currentTitle || 'Untitled',
@@ -277,35 +261,60 @@ export class LocalProjectStorage implements GUIStorage {
                     created: now,
                     modified: now
                 });
+                if (aliasKey !== null && !params.isCopy && !params.isRemix) {
+                    this.aliases.set(aliasKey, id);
+                }
+            } else {
+                const header = await db.getHeader(id);
+                if (header) {
+                    header.modified = now;
+                    // Sync the name with the current redux title: a save always
+                    // happens while the project is being edited, and some title
+                    // changes (e.g. from an .sb3 upload filename) arrive during
+                    // loading states where the rename HOC doesn't persist them.
+                    const newName = params.title || this.currentTitle;
+                    if (newName) header.name = newName;
+                    await db.putHeader(header);
+                } else {
+                    // Header vanished (e.g. deleted in another tab): recreate it
+                    await db.putHeader({
+                        id,
+                        name: params.title || this.currentTitle || 'Untitled',
+                        thumbnail: null,
+                        comment: '',
+                        created: now,
+                        modified: now
+                    });
+                }
             }
-        }
 
-        // Skip the version snapshot when the body is unchanged (e.g. a save
-        // triggered right after a reload) to avoid duplicate history entries.
-        const currentBody = isCreate ? null : await db.getBody(id);
-        const bodyChanged = !currentBody || currentBody.body !== vmState;
+            // Skip the version snapshot when the body is unchanged (e.g. a save
+            // triggered right after a reload) to avoid duplicate history entries.
+            const currentBody = isCreate ? null : await db.getBody(id);
+            const bodyChanged = !currentBody || currentBody.body !== vmState;
 
-        await db.putBody({id, body: vmState});
-        if (bodyChanged) {
-            let parentTs = this.lastVersionTimestamp.get(id);
-            if (parentTs === undefined) {
-                const versions = await db.listVersions(id);
-                parentTs = versions.length > 0 ? versions[0].timestamp : undefined;
+            await db.putBody({id, body: vmState});
+            if (bodyChanged) {
+                let parentTs = this.lastVersionTimestamp.get(id);
+                if (parentTs === undefined) {
+                    const versions = await db.listVersions(id);
+                    parentTs = versions.length > 0 ? versions[0].timestamp : undefined;
+                }
+                const parentTsFinal = parentTs || null;
+                const diff = computeVersionDiff(currentBody ? currentBody.body : null, vmState);
+                await db.putVersion({projectId: id, timestamp: now, parentTimestamp: parentTsFinal, body: vmState, thumbnail: null, diff});
+                this.lastVersionTimestamp.set(id, now);
+                await this.thinVersions(id, now);
             }
-            const parentTsFinal = parentTs || null;
-            const diff = computeVersionDiff(currentBody ? currentBody.body : null, vmState);
-            await db.putVersion({projectId: id, timestamp: now, parentTimestamp: parentTsFinal, body: vmState, thumbnail: null, diff});
-            this.lastVersionTimestamp.set(id, now);
-            await this.thinVersions(id, now);
-        }
-        this.knownModified.set(id, now);
+            this.knownModified.set(id, now);
 
-        try {
-            localStorage.setItem(LAST_PROJECT_KEY, id);
-        } catch {
-            // localStorage unavailable (private mode etc.) - resume-last just won't work
-        }
-        return {id};
+            try {
+                localStorage.setItem(LAST_PROJECT_KEY, id);
+            } catch {
+                // localStorage unavailable (private mode etc.) - resume-last just won't work
+            }
+            return {id};
+        });
     }
 
     /*
@@ -468,6 +477,65 @@ export class LocalProjectStorage implements GUIStorage {
         await db.putVersion(version);
     }
 
+    /*
+     * Force-create a new version with a comment and keep flag set at
+     * creation time (e.g. from an extension block via
+     * runtime.saveProjectVersion). Unlike saveProject, a version snapshot is
+     * always written even when the body is unchanged, so a checkpoint is
+     * guaranteed to exist; setting comment/isKeep at creation also means
+     * thinning never observes an un-kept moment for it.
+     */
+    async saveVersionWithMeta (
+        projectId: ProjectId,
+        vmState: string,
+        meta: {comment?: string; isKeep?: boolean}
+    ): Promise<{id: ProjectId; timestamp: number}> {
+        const idString = String(projectId);
+        const id = isLocalProjectId(idString) ? idString : this.aliases.get(idString);
+        if (!id) throw new Error(`Local project not found: ${idString}`);
+
+        return this.enqueueWrite(id, async () => {
+            // Read the header inside the queue so a concurrent save's header
+            // update (e.g. a title sync) is never overwritten with stale data.
+            const header = await db.getHeader(id);
+            if (!header) throw new Error(`Local project not found: ${id}`);
+            const now = Date.now();
+            const currentBody = await db.getBody(id);
+            await db.putBody({id, body: vmState});
+
+            let parentTs = this.lastVersionTimestamp.get(id);
+            if (parentTs === undefined) {
+                const versions = await db.listVersions(id);
+                parentTs = versions.length > 0 ? versions[0].timestamp : undefined;
+            }
+            const parentTsFinal = parentTs || null;
+            const diff = computeVersionDiff(currentBody ? currentBody.body : null, vmState);
+            await db.putVersion({
+                projectId: id,
+                timestamp: now,
+                parentTimestamp: parentTsFinal,
+                body: vmState,
+                thumbnail: null,
+                comment: meta.comment || '',
+                isKeep: Boolean(meta.isKeep),
+                diff
+            });
+            this.lastVersionTimestamp.set(id, now);
+
+            header.modified = now;
+            await db.putHeader(header);
+            this.knownModified.set(id, now);
+            await this.thinVersions(id, now);
+
+            try {
+                localStorage.setItem(LAST_PROJECT_KEY, id);
+            } catch {
+                // localStorage unavailable (private mode etc.) - resume-last just won't work
+            }
+            return {id, timestamp: now};
+        });
+    }
+
     async getVersionBody (id: ProjectId, timestamp: number): Promise<string | undefined> {
         const version = await db.getVersion(String(id), timestamp);
         return version?.body;
@@ -560,6 +628,18 @@ export class LocalProjectStorage implements GUIStorage {
     private resolveId (id: string): string | null {
         if (isLocalProjectId(id)) return id;
         return this.aliases.get(id) ?? null;
+    }
+
+    /*
+     * Run `fn` after any previously queued write for `id` has settled, so
+     * concurrent read-modify-write sequences targeting the same project
+     * (autosave vs. a forced saveVersionWithMeta, etc.) never interleave.
+     */
+    private enqueueWrite<T> (id: string, fn: () => Promise<T>): Promise<T> {
+        const prior = this.pendingWrites.get(id) || Promise.resolve();
+        const settled = prior.then(fn, fn);
+        this.pendingWrites.set(id, settled.catch(() => undefined));
+        return settled;
     }
 
     private async thinVersions (projectId: string, now: number): Promise<void> {

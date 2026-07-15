@@ -252,6 +252,101 @@ test('Disposing the runtime emits an event', t => {
     t.end();
 });
 
+test('saveProjectVersion rejects when no save handler is attached', t => {
+    const rt = new Runtime();
+    return rt.saveProjectVersion('a comment', true).then(
+        () => t.fail('saveProjectVersion should reject when no handler is attached'),
+        err => {
+            t.type(err, Error);
+            t.match(err.message, /not supported/);
+            t.end();
+        }
+    );
+});
+
+test('saveProjectVersion calls the attached handler and passes its promise through', t => {
+    const rt = new Runtime();
+    const calls = [];
+    const result = {timestamp: 12345};
+    rt.attachProjectSaveHandler((comment, isKeep) => {
+        calls.push([comment, isKeep]);
+        return Promise.resolve(result);
+    });
+    return rt.saveProjectVersion('level 1 cleared', true).then(value => {
+        t.equal(calls.length, 1, 'handler called exactly once');
+        t.equal(calls[0][0], 'level 1 cleared', 'comment passed as string');
+        t.equal(calls[0][1], true, 'isKeep passed as boolean');
+        t.equal(value, result, 'handler resolution value is passed through');
+        t.end();
+    });
+});
+
+test('saveProjectVersion passes handler rejection through', t => {
+    const rt = new Runtime();
+    const boom = new Error('storage failed');
+    rt.attachProjectSaveHandler(() => Promise.reject(boom));
+    return rt.saveProjectVersion('c', false).then(
+        () => t.fail('rejection from the handler should be passed through'),
+        err => {
+            t.equal(err, boom, 'handler rejection reason is passed through');
+            t.end();
+        }
+    );
+});
+
+test('saveProjectVersion coerces missing comment/isKeep to \'\' and false', t => {
+    const rt = new Runtime();
+    const calls = [];
+    rt.attachProjectSaveHandler((comment, isKeep) => {
+        calls.push([comment, isKeep]);
+        return Promise.resolve();
+    });
+    return rt.saveProjectVersion().then(() => {
+        t.equal(calls[0][0], '', 'undefined comment coerced to empty string');
+        t.equal(calls[0][1], false, 'undefined isKeep coerced to false');
+        // non-string / non-boolean values are coerced too
+        return rt.saveProjectVersion(123, 1);
+    })
+        .then(() => {
+            t.equal(calls[1][0], '123', 'numeric comment coerced to string');
+            t.equal(calls[1][1], true, 'truthy isKeep coerced to boolean');
+            t.end();
+        });
+});
+
+test('attachProjectSaveHandler(null) detaches the handler', t => {
+    const rt = new Runtime();
+    const handler = () => Promise.resolve('saved');
+    rt.attachProjectSaveHandler(handler);
+    return rt.saveProjectVersion('c', false).then(value => {
+        t.equal(value, 'saved', 'handler works while attached');
+        rt.attachProjectSaveHandler(null);
+        return rt.saveProjectVersion('c', false).then(
+            () => t.fail('saveProjectVersion should reject after the handler is detached'),
+            err => {
+                t.type(err, Error);
+                t.end();
+            }
+        );
+    });
+});
+
+test('vm.attachProjectSaveHandler forwards to the runtime', t => {
+    const vm = new VirtualMachine();
+    const calls = [];
+    vm.attachProjectSaveHandler((comment, isKeep) => {
+        calls.push([comment, isKeep]);
+        return Promise.resolve('ok');
+    });
+    return vm.runtime.saveProjectVersion('via vm', false).then(value => {
+        t.equal(calls.length, 1, 'handler attached through the vm is used by the runtime');
+        t.equal(calls[0][0], 'via vm');
+        t.equal(calls[0][1], false);
+        t.equal(value, 'ok');
+        t.end();
+    });
+});
+
 test('Clock is reset on runtime dispose', t => {
     const rt = new Runtime();
     const c = rt.ioDevices.clock;
