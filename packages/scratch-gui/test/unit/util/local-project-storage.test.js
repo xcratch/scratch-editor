@@ -241,6 +241,192 @@ describe('LocalProjectStorage.saveProject', () => {
     });
 });
 
+describe('LocalProjectStorage.saveVersionWithMeta', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        db.getHeader.mockResolvedValue(null);
+        db.getBody.mockResolvedValue(null);
+        db.putHeader.mockResolvedValue('ok');
+        db.putBody.mockResolvedValue('ok');
+        db.putVersion.mockResolvedValue('ok');
+        db.listVersions.mockResolvedValue([]);
+        db.deleteVersions.mockResolvedValue(null);
+        // thinning may trigger the orphan-asset GC
+        db.getAllBodies.mockResolvedValue([]);
+        db.getAllVersionBodies.mockResolvedValue([]);
+        db.listAssetKeys.mockResolvedValue([]);
+        db.deleteAssets.mockResolvedValue(null);
+    });
+
+    const makeStorage = () => {
+        const storage = new LocalProjectStorage();
+        storage.noteProjectTitle('My Title');
+        return storage;
+    };
+
+    test('creates a new version even when the body is unchanged, unlike saveProject', async () => {
+        const header = {id: '1751400000000', name: 'P', thumbnail: null, created: 1, modified: 1};
+        db.getHeader.mockImplementation(id => Promise.resolve(id === '1751400000000' ? {...header} : null));
+        db.getBody.mockResolvedValue({id: '1751400000000', body: '{"same":true}'});
+        const storage = makeStorage();
+        // saveProject skips the version snapshot for an identical body...
+        await storage.saveProject('1751400000000', '{"same":true}', {});
+        expect(db.putVersion).not.toHaveBeenCalled();
+        // ...but saveVersionWithMeta force-writes one anyway
+        const result = await storage.saveVersionWithMeta(
+            '1751400000000', '{"same":true}', {comment: 'checkpoint', isKeep: false});
+        expect(db.putVersion).toHaveBeenCalledTimes(1);
+        expect(db.putVersion).toHaveBeenCalledWith(expect.objectContaining({
+            projectId: '1751400000000',
+            body: '{"same":true}',
+            comment: 'checkpoint',
+            isKeep: false
+        }));
+        expect(result.id).toBe('1751400000000');
+        expect(result.timestamp).toBe(db.putVersion.mock.calls[0][0].timestamp);
+    });
+
+    test('sets comment, isKeep and diff, chaining parentTimestamp to the previous version', async () => {
+        const storage = makeStorage();
+        const saved = await storage.saveProject(null, '{"targets":[]}', {});
+        const id = String(saved.id);
+        const firstVersion = db.putVersion.mock.calls[0][0];
+        db.getHeader.mockImplementation(headerId => Promise.resolve(
+            headerId === id ?
+                {id, name: 'My Title', thumbnail: null, created: 1, modified: firstVersion.timestamp} :
+                null
+        ));
+        db.getBody.mockResolvedValue({id, body: '{"targets":[]}'});
+
+        const result = await storage.saveVersionWithMeta(
+            id, '{"targets":[],"x":1}', {comment: 'レベル1クリア', isKeep: true});
+
+        expect(db.putVersion).toHaveBeenCalledTimes(2);
+        const metaVersion = db.putVersion.mock.calls[1][0];
+        expect(metaVersion).toEqual(expect.objectContaining({
+            projectId: id,
+            body: '{"targets":[],"x":1}',
+            comment: 'レベル1クリア',
+            isKeep: true,
+            // chains to the version written by the preceding save
+            parentTimestamp: firstVersion.timestamp
+        }));
+        // the diff is computed at creation time (real computeVersionDiff)
+        expect(metaVersion.diff).toEqual(expect.objectContaining({code: expect.any(Boolean)}));
+        expect(result).toEqual({id, timestamp: metaVersion.timestamp});
+    });
+
+    test('falls back to listVersions for parentTimestamp when the storage is fresh', async () => {
+        const header = {id: '1751400000000', name: 'P', thumbnail: null, created: 1, modified: 1};
+        db.getHeader.mockImplementation(id => Promise.resolve(id === '1751400000000' ? {...header} : null));
+        db.listVersions.mockResolvedValue([
+            {projectId: '1751400000000', timestamp: 5000, parentTimestamp: null, body: '{}', thumbnail: null}
+        ]);
+        const storage = makeStorage();
+        await storage.saveVersionWithMeta('1751400000000', '{}', {});
+        expect(db.putVersion).toHaveBeenCalledWith(expect.objectContaining({
+            parentTimestamp: 5000,
+            comment: '',
+            isKeep: false
+        }));
+    });
+
+    test('rejects for an id that is neither a local project id nor an alias', async () => {
+        const storage = makeStorage();
+        await expect(storage.saveVersionWithMeta('https://example.com/p.sb3', '{}', {}))
+            .rejects.toThrow('Local project not found');
+        expect(db.putVersion).not.toHaveBeenCalled();
+    });
+
+    test('rejects when no header exists for the project id', async () => {
+        db.getHeader.mockResolvedValue(null);
+        const storage = makeStorage();
+        await expect(storage.saveVersionWithMeta('1751400000000', '{}', {}))
+            .rejects.toThrow('Local project not found');
+        expect(db.putVersion).not.toHaveBeenCalled();
+    });
+
+    test('versions marked isKeep=true survive thinning', async () => {
+        const id = '1751400000000';
+        db.getHeader.mockImplementation(headerId => Promise.resolve(
+            headerId === id ? {id, name: 'P', thumbnail: null, created: 1, modified: 1} : null));
+        const now = Date.now();
+        // 45 versions, newest first, all within the keep-all band (last 10
+        // minutes) - the hard cap of 40 marks the oldest 5 for deletion
+        // (same fixture idea as the selectVersionsToThin hard-cap test).
+        const versions = Array.from({length: 45}, (_, i) => ({
+            projectId: id,
+            timestamp: now - (i * 1000),
+            parentTimestamp: null,
+            body: '{}',
+            thumbnail: null,
+            isKeep: i >= 43 // ...but the two oldest are marked as kept
+        }));
+        db.listVersions.mockResolvedValue(versions);
+        const storage = makeStorage();
+        await storage.saveVersionWithMeta(id, '{"v":46}', {comment: 'kept', isKeep: true});
+
+        expect(db.deleteVersions).toHaveBeenCalledTimes(1);
+        const deletedTimestamps = db.deleteVersions.mock.calls[0][0].map(([, ts]) => ts);
+        // un-kept thinning candidates are still deleted
+        expect(deletedTimestamps).toEqual([
+            versions[40].timestamp, versions[41].timestamp, versions[42].timestamp
+        ]);
+        // the isKeep versions among the candidates are spared
+        expect(deletedTimestamps).not.toContain(versions[43].timestamp);
+        expect(deletedTimestamps).not.toContain(versions[44].timestamp);
+    });
+
+    test('serializes concurrent saveProject and saveVersionWithMeta on the same project', async () => {
+        const id = '1751400000000';
+        db.getHeader.mockImplementation(headerId => Promise.resolve(
+            headerId === id ? {id, name: 'P', thumbnail: null, created: 1, modified: 1} : null));
+        const order = [];
+        let releaseGate;
+        const gate = new Promise(resolve => {
+            releaseGate = resolve;
+        });
+        let firstGetBody = true;
+        db.getBody.mockImplementation(async () => {
+            if (firstGetBody) {
+                firstGetBody = false;
+                order.push('saveProject:getBody:start');
+                await gate; // hold the first write mid-flight
+                order.push('saveProject:getBody:end');
+                return null;
+            }
+            order.push('saveVersionWithMeta:getBody');
+            return null;
+        });
+        db.putVersion.mockImplementation(version => {
+            order.push(`putVersion:${typeof version.comment === 'undefined' ? 'autosave' : 'meta'}`);
+            return Promise.resolve('ok');
+        });
+
+        const storage = makeStorage();
+        const autosave = storage.saveProject(id, '{"a":1}', {});
+        const forced = storage.saveVersionWithMeta(id, '{"a":2}', {comment: 'checkpoint'});
+        // let both calls start, then unblock the autosave
+        await new Promise(resolve => setTimeout(resolve, 0));
+        releaseGate();
+        await Promise.all([autosave, forced]);
+
+        // the forced save never starts its read-modify-write until the
+        // autosave (started first) has completely finished
+        expect(order).toEqual([
+            'saveProject:getBody:start',
+            'saveProject:getBody:end',
+            'putVersion:autosave',
+            'saveVersionWithMeta:getBody',
+            'putVersion:meta'
+        ]);
+        // and the forced version chains to the autosaved one
+        const autosaveVersion = db.putVersion.mock.calls[0][0];
+        const metaVersion = db.putVersion.mock.calls[1][0];
+        expect(metaVersion.parentTimestamp).toBe(autosaveVersion.timestamp);
+    });
+});
+
 describe('LocalProjectStorage multi-tab conflict detection', () => {
     beforeEach(() => {
         jest.clearAllMocks();

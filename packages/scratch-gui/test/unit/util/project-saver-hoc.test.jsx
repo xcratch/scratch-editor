@@ -16,6 +16,11 @@ describe('projectSaverHOC', () => {
     let vm;
 
     beforeEach(() => {
+        vm = new VM();
+        // The HOC attaches a project save handler to the VM on mount. The
+        // packaged VM build may predate attachProjectSaveHandler, so always
+        // stub it here - it also lets tests observe the attach calls.
+        vm.attachProjectSaveHandler = jest.fn();
         store = mockStore({
             scratchGui: {
                 config: legacyConfig,
@@ -24,13 +29,13 @@ describe('projectSaverHOC', () => {
                 projectTitle: 'Scratch Project',
                 timeout: {
                     autoSaveTimeoutId: null
-                }
+                },
+                vm
             },
             locales: {
                 locale: 'en'
             }
         });
-        vm = new VM();
         jest.useFakeTimers();
     });
 
@@ -665,5 +670,100 @@ describe('projectSaverHOC', () => {
         unmount();
         expect(setSaver).toHaveBeenCalledTimes(2);
         expect(setSaver.mock.calls[1][0]).toBe(null);
+    });
+
+    // The save-version handler lets extension blocks force a history save
+    // (with comment/keep) through vm.runtime.saveProjectVersion.
+    const makeStoreWith = ({storage, projectId}) => mockStore({
+        scratchGui: {
+            config: {...legacyConfig, storage},
+            projectChanged: false,
+            projectState: {projectId},
+            projectTitle: 'Scratch Project',
+            timeout: {
+                autoSaveTimeoutId: null
+            },
+            vm
+        },
+        locales: {
+            locale: 'en'
+        }
+    });
+
+    test('attaches the project save handler to the vm on mount and detaches it on unmount', () => {
+        const Component = () => <div />;
+        const WrappedComponent = projectSaverHOC(Component);
+        const {unmount} = render(
+            <WrappedComponent
+                store={store}
+                vm={vm}
+            />
+        );
+        // A handler function should be attached on mount
+        expect(vm.attachProjectSaveHandler).toHaveBeenCalledTimes(1);
+        expect(typeof vm.attachProjectSaveHandler.mock.calls[0][0]).toBe('function');
+
+        // Unmounting should detach it with null
+        unmount();
+        expect(vm.attachProjectSaveHandler).toHaveBeenCalledTimes(2);
+        expect(vm.attachProjectSaveHandler.mock.calls[1][0]).toBe(null);
+    });
+
+    test('the attached handler stores a version via storage.saveVersionWithMeta and resolves {timestamp}', async () => {
+        const mockedSaveVersionWithMeta = jest.fn(() => Promise.resolve({id: '100', timestamp: 999}));
+        const storage = {saveVersionWithMeta: mockedSaveVersionWithMeta};
+        vm.toJSON = jest.fn(() => '{"vm":"state"}');
+        const Component = () => <div />;
+        const WrappedComponent = projectSaverHOC(Component);
+        render(
+            <WrappedComponent
+                store={makeStoreWith({storage, projectId: '100'})}
+                vm={vm}
+            />
+        );
+        const handler = vm.attachProjectSaveHandler.mock.calls[0][0];
+        const result = await handler('レベル1クリア', true);
+        expect(mockedSaveVersionWithMeta).toHaveBeenCalledTimes(1);
+        expect(mockedSaveVersionWithMeta).toHaveBeenCalledWith(
+            '100', '{"vm":"state"}', {comment: 'レベル1クリア', isKeep: true});
+        expect(result).toEqual({timestamp: 999});
+    });
+
+    test('the attached handler rejects (without throwing) when storage lacks saveVersionWithMeta', async () => {
+        const Component = () => <div />;
+        const WrappedComponent = projectSaverHOC(Component);
+        render(
+            <WrappedComponent
+                store={makeStoreWith({storage: {}, projectId: '100'})}
+                vm={vm}
+            />
+        );
+        const handler = vm.attachProjectSaveHandler.mock.calls[0][0];
+        let returned;
+        // must not throw synchronously - failures surface through the promise
+        expect(() => {
+            returned = handler('c', true);
+        }).not.toThrow();
+        await expect(returned).rejects.toThrow('not supported');
+    });
+
+    test('the attached handler rejects when there is no project id yet', async () => {
+        const mockedSaveVersionWithMeta = jest.fn(() => Promise.resolve({id: '100', timestamp: 999}));
+        const storage = {saveVersionWithMeta: mockedSaveVersionWithMeta};
+        const Component = () => <div />;
+        const WrappedComponent = projectSaverHOC(Component);
+        render(
+            <WrappedComponent
+                store={makeStoreWith({storage, projectId: null})}
+                vm={vm}
+            />
+        );
+        const handler = vm.attachProjectSaveHandler.mock.calls[0][0];
+        let returned;
+        expect(() => {
+            returned = handler('c', false);
+        }).not.toThrow();
+        await expect(returned).rejects.toThrow('before the project has been saved');
+        expect(mockedSaveVersionWithMeta).not.toHaveBeenCalled();
     });
 });

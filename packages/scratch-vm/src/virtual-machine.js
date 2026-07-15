@@ -1149,6 +1149,15 @@ class VirtualMachine extends EventEmitter {
     }
 
     /**
+     * Set the project save handler for the VM/runtime, which lets the host
+     * (e.g. scratch-gui) save a project history version on request.
+     * @param {?Function} handler The handler to attach, or null to detach.
+     */
+    attachProjectSaveHandler (handler) {
+        this.runtime.attachProjectSaveHandler(handler);
+    }
+
+    /**
      * set the current locale and builtin messages for the VM
      * @param {!string} locale       current locale
      * @param {!object} messages     builtin messages map for current locale

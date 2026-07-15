@@ -32,6 +32,16 @@ export interface GUIStorage {
 
     saveProjectThumbnail?(projectId: ProjectId, thumbnail: Blob): void;
 
+    // Force-saves a new version with a comment and keep flag set at creation
+    // time (e.g. from an extension block via runtime.saveProjectVersion).
+    // Implementations that don't support history simply omit this method;
+    // callers must feature-detect with `typeof storage.xxx === 'function'`.
+    saveVersionWithMeta?(
+        projectId: ProjectId,
+        vmState: string,
+        meta: {comment?: string; isKeep?: boolean}
+    ): Promise<{id: ProjectId; timestamp: number}>;
+
     // TODO: Support backpack storage
 }
 
@@ -58,5 +68,7 @@ export const GUIStoragePropType = PropTypes.shape({
 
     saveProject: PropTypes.func.isRequired,
 
-    saveProjectThumbnail: PropTypes.func
+    saveProjectThumbnail: PropTypes.func,
+
+    saveVersionWithMeta: PropTypes.func
 });
