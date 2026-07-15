@@ -1,4 +1,5 @@
 import {installEnhancedCleanup} from './enhanced-cleanup.js';
+import {installMultilineTextInput} from './multiline-text-input.js';
 import blocksOverrideTranslations from '../lib/blocks-override-translations.js';
 
 /**
@@ -371,6 +372,12 @@ export default function (vm, useCatBlocks) {
         useEnhancedCleanup: true,
         animate: true,
         animationDelay: 10
+    });
+
+    // Install multiline editing support for plain text input fields
+    installMultilineTextInput(ScratchBlocks, {
+        truncateLength: 13,
+        includeRemovable: false
     });
 
     // Override default messages with any provided by the localization system
