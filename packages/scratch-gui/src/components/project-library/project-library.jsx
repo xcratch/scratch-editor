@@ -26,10 +26,14 @@ const messages = defineMessages({
 
 const ProjectLibraryComponent = props => {
     const {
+        canManageVersions,
+        canPlayVersion,
+        canSeeInsideVersion,
         confirmRestoreTimestamp,
         currentProjectId,
         historyProjectName,
         intl,
+        listAvailable,
         loading,
         onBackToList,
         onCancelRestore,
@@ -38,6 +42,8 @@ const ProjectLibraryComponent = props => {
         onDeleteProject,
         onDeleteVersion,
         onOpenProject,
+        onPlayVersion,
+        onSeeInsideVersion,
         onRequestClose,
         onRestoreVersion,
         onSetComment,
@@ -85,55 +91,73 @@ const ProjectLibraryComponent = props => {
     const renderHistory = () => {
         const graphData = computeGraphLayout(versions);
         return (
-        <div className={styles.historyContainer}>
-            <div className={styles.historyHeader}>
-                <button
-                    className={styles.itemButton}
-                    onClick={onBackToList}
-                >
-                    <FormattedMessage
-                        defaultMessage="Back to list"
-                        description="Button to go back from the version history to the project list"
-                        id="xcratch.projectHistory.back"
-                    />
-                </button>
-                <span className={styles.historyTitle}>
-                    <FormattedMessage
-                        defaultMessage="History of {projectName}"
-                        description="Heading of the version history view"
-                        id="xcratch.projectHistory.title"
-                        values={{projectName: historyProjectName}}
-                    />
-                </span>
-            </div>
-            <div className={styles.versionList}>
-                {versions.length === 0 ? (
-                    <div className={styles.emptyMessage}>
+            <div className={styles.historyContainer}>
+                <div className={styles.historyHeader}>
+                    {listAvailable ? (
+                        <button
+                            className={styles.itemButton}
+                            onClick={onBackToList}
+                        >
+                            <FormattedMessage
+                                defaultMessage="Back to list"
+                                description="Button to go back from the version history to the project list"
+                                id="xcratch.projectHistory.back"
+                            />
+                        </button>
+                    ) : (
+                        <button
+                            className={styles.itemButton}
+                            onClick={onRequestClose}
+                        >
+                            <FormattedMessage
+                                defaultMessage="Close"
+                                description="Button to close the history view when there is no project list to go back to (workshop mode)" // eslint-disable-line max-len
+                                id="xcratch.projectHistory.close"
+                            />
+                        </button>
+                    )}
+                    <span className={styles.historyTitle}>
                         <FormattedMessage
-                            defaultMessage="No saved versions yet."
-                            description="Message shown when a project has no version history"
-                            id="xcratch.projectHistory.empty"
+                            defaultMessage="History of {projectName}"
+                            description="Heading of the version history view"
+                            id="xcratch.projectHistory.title"
+                            values={{projectName: historyProjectName}}
                         />
-                    </div>
-                ) : versions.map((version, i) => (
-                    <VersionRow
-                        comment={version.comment}
-                        commentPlaceholder={intl.formatMessage(messages.commentPlaceholder)}
-                        diff={version.diff}
-                        graphInfo={graphData[i]}
-                        isKeep={version.isKeep}
-                        key={version.timestamp}
-                        thumbnailUrl={version.thumbnailUrl}
-                        timestamp={version.timestamp}
-                        onDelete={onDeleteVersion}
-                        onRestore={onRestoreVersion}
-                        onSetComment={onSetVersionComment}
-                        onSetKeep={onSetVersionKeep}
-                    />
-                ))}
+                    </span>
+                </div>
+                <div className={styles.versionList}>
+                    {versions.length === 0 ? (
+                        <div className={styles.emptyMessage}>
+                            <FormattedMessage
+                                defaultMessage="No saved versions yet."
+                                description="Message shown when a project has no version history"
+                                id="xcratch.projectHistory.empty"
+                            />
+                        </div>
+                    ) : versions.map((version, i) => (
+                        <VersionRow
+                            canManage={canManageVersions}
+                            canPlay={canPlayVersion}
+                            canSeeInside={canSeeInsideVersion}
+                            comment={version.comment}
+                            commentPlaceholder={intl.formatMessage(messages.commentPlaceholder)}
+                            diff={version.diff}
+                            graphInfo={graphData[i]}
+                            isKeep={version.isKeep}
+                            key={version.timestamp}
+                            thumbnailUrl={version.thumbnailUrl}
+                            timestamp={version.timestamp}
+                            onDelete={onDeleteVersion}
+                            onPlay={onPlayVersion}
+                            onSeeInside={onSeeInsideVersion}
+                            onRestore={onRestoreVersion}
+                            onSetComment={onSetVersionComment}
+                            onSetKeep={onSetVersionKeep}
+                        />
+                    ))}
+                </div>
             </div>
-        </div>
-    );
+        );
     };
 
     return (
@@ -201,10 +225,14 @@ const ProjectLibraryComponent = props => {
 };
 
 ProjectLibraryComponent.propTypes = {
+    canManageVersions: PropTypes.bool,
+    canPlayVersion: PropTypes.bool,
+    canSeeInsideVersion: PropTypes.bool,
     confirmRestoreTimestamp: PropTypes.number,
     currentProjectId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
     historyProjectName: PropTypes.string,
     intl: intlShape.isRequired,
+    listAvailable: PropTypes.bool,
     loading: PropTypes.bool,
     onBackToList: PropTypes.func.isRequired,
     onCancelRestore: PropTypes.func.isRequired,
@@ -213,6 +241,8 @@ ProjectLibraryComponent.propTypes = {
     onDeleteProject: PropTypes.func.isRequired,
     onDeleteVersion: PropTypes.func.isRequired,
     onOpenProject: PropTypes.func.isRequired,
+    onPlayVersion: PropTypes.func,
+    onSeeInsideVersion: PropTypes.func,
     onRequestClose: PropTypes.func.isRequired,
     onRestoreVersion: PropTypes.func.isRequired,
     onSetComment: PropTypes.func.isRequired,
@@ -233,6 +263,13 @@ ProjectLibraryComponent.propTypes = {
         isKeep: PropTypes.bool
     })).isRequired,
     view: PropTypes.oneOf(['list', 'history']).isRequired
+};
+
+ProjectLibraryComponent.defaultProps = {
+    canManageVersions: true,
+    canPlayVersion: false,
+    canSeeInsideVersion: false,
+    listAvailable: true
 };
 
 export default injectIntl(ProjectLibraryComponent);

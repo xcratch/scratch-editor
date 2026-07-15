@@ -1,10 +1,10 @@
 import {ScratchStorage, Asset, AssetType, DataFormat, Helper} from 'scratch-storage';
 
 import defaultProject from './default-project';
-import {GUIStorage, ProjectId, TranslatorFunction} from '../gui-config';
+import {GUIStorage, ProjectId, ProjectVersionItem, TranslatorFunction} from '../gui-config';
 
 import * as db from './local-project-db';
-import {computeVersionDiff, VersionDiff} from './project-diff';
+import {computeVersionDiff} from './project-diff';
 
 const LAST_PROJECT_KEY = 'xcratch:lastLocalProjectId';
 
@@ -160,15 +160,9 @@ export interface LocalProjectListItem {
     comment?: string;
 }
 
-export interface LocalProjectVersionItem {
-    projectId: string;
-    timestamp: number;
-    parentTimestamp?: number | null;
-    thumbnail: Blob | null;
-    comment?: string;
-    diff?: VersionDiff;
-    isKeep?: boolean;
-}
+// Alias of the type shared with WorkshopProjectStorage (see gui-config.ts).
+// Implementation below is unchanged; only the type declaration moved.
+export type LocalProjectVersionItem = ProjectVersionItem;
 
 export class LocalProjectStorage implements GUIStorage {
     readonly scratchStorage = new LocalScratchStorage((id, modified) => {

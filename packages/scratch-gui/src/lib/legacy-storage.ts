@@ -6,8 +6,10 @@ import {GUIStorage, TranslatorFunction} from '../gui-config';
 import saveProjectToServer from '../lib/save-project-to-server';
 
 export class LegacyStorage implements GUIStorage {
-    private projectHost?: string;
-    private projectToken?: string;
+    // protected (not private) so WorkshopProjectStorage can build version-history
+    // URLs from the same host/token and override getProjectGetConfig below.
+    protected projectHost?: string;
+    protected projectToken?: string;
     private assetHost?: string;
     private backpackHost?: string;
     private translator?: TranslatorFunction;
@@ -110,7 +112,9 @@ export class LegacyStorage implements GUIStorage {
         );
     }
 
-    private getProjectGetConfig (projectAsset) {
+    // protected so WorkshopProjectStorage can override it to serve
+    // `.../versions/{timestamp}` when a version override is active.
+    protected getProjectGetConfig (projectAsset) {
         if (/^(http|https):\/\//.test(projectAsset.assetId)) {
             return projectAsset.assetId;
         }
