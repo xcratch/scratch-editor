@@ -458,6 +458,7 @@ export class LocalProjectStorage implements GUIStorage {
     /*
      * Persist the free-form note shown in the version history view.
      * Like project comments, this is metadata and does not touch `modified`.
+     * A commented version is excluded from automatic thinning.
      */
     async setVersionComment (id: ProjectId, timestamp: number, comment: string): Promise<void> {
         const version = await db.getVersion(String(id), timestamp);
@@ -655,10 +656,11 @@ export class LocalProjectStorage implements GUIStorage {
             }
         }
 
-        // Never auto-delete versions that serve as a branch parent, or that are marked as kept
+        // Never auto-delete versions that serve as a branch parent, that are
+        // marked as kept, or that carry a user comment
         toDelete = toDelete.filter(ts => {
             const version = versions.find(v => v.timestamp === ts);
-            if (version && version.isKeep) return false;
+            if (version && (version.isKeep || version.comment)) return false;
             return (childCounts.get(ts) || 0) < 2;
         });
         if (toDelete.length === 0) return;
