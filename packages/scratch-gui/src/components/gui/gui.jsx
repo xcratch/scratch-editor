@@ -21,6 +21,7 @@ import MenuBar from '../menu-bar/menu-bar.jsx';
 import CostumeLibrary from '../../containers/costume-library.jsx';
 import BackdropLibrary from '../../containers/backdrop-library.jsx';
 import ProjectLibrary from '../../containers/project-library.jsx';
+import SaveVersionModal from '../../containers/save-version-modal.jsx';
 import Watermark from '../../containers/watermark.jsx';
 
 import Backpack from '../../containers/backpack.jsx';
@@ -132,6 +133,7 @@ const GUIComponent = props => {
         onTelemetryModalOptIn,
         onTelemetryModalOptOut,
         onUpdateProjectThumbnail,
+        saveVersionModalVisible,
         showComingSoon,
         showNewFeatureCallouts,
         soundsTabVisible,
@@ -280,6 +282,9 @@ const GUIComponent = props => {
                         canSave={canSave}
                         onRequestClose={onRequestCloseProjectLibrary}
                     />
+                ) : null}
+                {saveVersionModalVisible ? (
+                    <SaveVersionModal />
                 ) : null}
                 {!menuBarHidden && <MenuBar
                     ariaRole="banner"
@@ -569,6 +574,7 @@ GUIComponent.propTypes = {
     platform: PropTypes.oneOf(Object.keys(PLATFORM)),
     projectLibraryVisible: PropTypes.bool,
     renderLogin: PropTypes.func,
+    saveVersionModalVisible: PropTypes.bool,
     setTheme: PropTypes.func.isRequired,
     showComingSoon: PropTypes.bool,
     showNewFeatureCallouts: PropTypes.bool,

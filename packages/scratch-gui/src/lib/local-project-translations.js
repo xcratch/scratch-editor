@@ -3,6 +3,12 @@
 const localProjectTranslations = {
     'ja': {
         'xcratch.menuBar.openProjectLibrary': 'プロジェクト一覧から開く',
+        'xcratch.menuBar.saveVersion': 'コメントを付けて保存',
+        'xcratch.saveVersionModal.title': 'バージョンを保存',
+        'xcratch.saveVersionModal.keepLabel': 'このバージョンを削除されないようにロックする',
+        'xcratch.saveVersionModal.save': '保存',
+        'xcratch.saveVersionModal.saving': '保存中…',
+        'xcratch.saveVersionModal.error': '保存に失敗しました: {error}',
         'xcratch.projectLibrary.title': 'ブラウザーの中のプロジェクト',
         'xcratch.projectLibrary.empty': 'このブラウザーに保存されたプロジェクトはまだありません。',
         'xcratch.projectLibrary.current': '編集中',
@@ -33,6 +39,12 @@ const localProjectTranslations = {
     },
     'ja-Hira': {
         'xcratch.menuBar.openProjectLibrary': 'プロジェクトいちらんからひらく',
+        'xcratch.menuBar.saveVersion': 'コメントをつけてほぞん',
+        'xcratch.saveVersionModal.title': 'バージョンをほぞん',
+        'xcratch.saveVersionModal.keepLabel': 'このバージョンをさくじょされないようにロックする',
+        'xcratch.saveVersionModal.save': 'ほぞん',
+        'xcratch.saveVersionModal.saving': 'ほぞんちゅう…',
+        'xcratch.saveVersionModal.error': 'ほぞんにしっぱいしました: {error}',
         'xcratch.projectLibrary.title': 'ブラウザーのなかのプロジェクト',
         'xcratch.projectLibrary.empty': 'このブラウザーにほぞんされたプロジェクトはまだありません。',
         'xcratch.projectLibrary.current': 'へんしゅうちゅう',

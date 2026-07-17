@@ -4,7 +4,7 @@ import MenuBar from '../../../src/components/menu-bar/menu-bar';
 import {menuInitialState} from '../../../src/reducers/menus';
 import {LoadingState} from '../../../src/reducers/project-state';
 import {DEFAULT_MODE} from '../../../src/lib/settings/color-mode';
-import {fireEvent} from '@testing-library/react';
+import {fireEvent, screen} from '@testing-library/react';
 
 import {PLATFORM} from '../../../src/lib/platform';
 
@@ -67,8 +67,69 @@ describe('MenuBar Component', () => {
             const onClickAbout = jest.fn();
             const {container} = renderWithIntl(getComponent({onClickAbout}));
             const button = container.querySelector('span[role="button"]');
-    
+
             expect(onClickAbout).toHaveBeenCalledTimes(0);
+        });
+    });
+
+    describe('save with a comment menu item', () => {
+        const getStoreWithFileMenu = ({canSaveProjectVersion}) => configureStore()({
+            locales: {
+                isRtl: false,
+                locale: 'en-US'
+            },
+            scratchGui: {
+                config: {
+                    storage: canSaveProjectVersion ? {saveVersionWithMeta: () => Promise.resolve()} : {}
+                },
+                menus: {
+                    ...menuInitialState,
+                    fileMenu: true
+                },
+                projectState: {
+                    loadingState: canSaveProjectVersion ?
+                        LoadingState.SHOWING_WITH_ID :
+                        LoadingState.NOT_LOADED
+                },
+                settings: {
+                    colorMode: DEFAULT_MODE
+                },
+                timeTravel: {
+                    year: 'NOW'
+                },
+                vm: new VM(),
+                platform: {
+                    platform: PLATFORM.WEB
+                }
+            }
+        });
+
+        test('shows "Save with a comment" and dispatches on click when allowed', () => {
+            const fileMenuStore = getStoreWithFileMenu({canSaveProjectVersion: true});
+            renderWithIntl(
+                <Provider store={fileMenuStore}>
+                    <MenuBar canManageFiles />
+                </Provider>
+            );
+
+            const menuItem = screen.getByText('Save with a comment');
+            expect(menuItem).toBeTruthy();
+
+            fireEvent.click(menuItem);
+
+            const actions = fileMenuStore.getActions();
+            expect(actions.some(action => action.modal === 'saveVersion')).toBe(true);
+        });
+
+        test('hides "Save with a comment" when not allowed', () => {
+            const fileMenuStore = getStoreWithFileMenu({canSaveProjectVersion: false});
+            renderWithIntl(
+                <Provider store={fileMenuStore}>
+                    <MenuBar canManageFiles />
+                </Provider>
+            );
+
+            expect(screen.queryByText('Save with a comment')).toBeFalsy();
         });
     });
 });

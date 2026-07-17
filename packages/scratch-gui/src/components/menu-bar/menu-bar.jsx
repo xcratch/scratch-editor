@@ -30,7 +30,12 @@ import TurboMode from '../../containers/turbo-mode.jsx';
 import MenuBarHOC from '../../containers/menu-bar-hoc.jsx';
 import SettingsMenu from './settings-menu.jsx';
 
-import {openTipsLibrary, openDebugModal, openProjectLibrary} from '../../reducers/modals';
+import {
+    openTipsLibrary,
+    openDebugModal,
+    openProjectLibrary,
+    openSaveVersionModal
+} from '../../reducers/modals';
 import {setPlayer} from '../../reducers/mode';
 import {
     isTimeTravel220022BC,
@@ -44,6 +49,7 @@ import {
     autoUpdateProject,
     getIsUpdating,
     getIsShowingProject,
+    getIsShowingWithId,
     manualUpdateProject,
     requestNewProject,
     remixProject,
@@ -190,6 +196,7 @@ class MenuBar extends React.Component {
             'handleClickRemix',
             'handleClickSave',
             'handleClickSaveAsCopy',
+            'handleClickSaveVersion',
             'handleClickSeeCommunity',
             'handleClickShare',
             'handleSetMode',
@@ -230,6 +237,10 @@ class MenuBar extends React.Component {
     }
     handleClickSave () {
         this.props.onClickSave();
+        this.props.onRequestCloseFile();
+    }
+    handleClickSaveVersion () {
+        this.props.onOpenSaveVersionModal();
         this.props.onRequestCloseFile();
     }
     handleClickSaveAsCopy () {
@@ -500,11 +511,21 @@ class MenuBar extends React.Component {
                                             {newProjectMessage}
                                         </MenuItem>
                                     </MenuSection>
-                                    {(this.props.canSave || this.props.canCreateCopy || this.props.canRemix) && (
+                                    {(this.props.canSave || this.props.canCreateCopy || this.props.canRemix ||
+                                        this.props.canSaveProjectVersion) && (
                                         <MenuSection>
                                             {this.props.canSave && (
                                                 <MenuItem onClick={this.handleClickSave}>
                                                     {saveNowMessage}
+                                                </MenuItem>
+                                            )}
+                                            {this.props.canSaveProjectVersion && (
+                                                <MenuItem onClick={this.handleClickSaveVersion}>
+                                                    <FormattedMessage
+                                                        defaultMessage="Save with a comment"
+                                                        description="Menu bar item for saving a project history version with a comment" // eslint-disable-line max-len
+                                                        id="xcratch.menuBar.saveVersion"
+                                                    />
                                                 </MenuItem>
                                             )}
                                             {this.props.canCreateCopy && (
@@ -935,6 +956,7 @@ MenuBar.propTypes = {
     canManageFiles: PropTypes.bool,
     canRemix: PropTypes.bool,
     canSave: PropTypes.bool,
+    canSaveProjectVersion: PropTypes.bool,
     canShare: PropTypes.bool,
     className: PropTypes.string,
     confirmReadyToReplaceProject: PropTypes.func,
@@ -972,6 +994,7 @@ MenuBar.propTypes = {
     onClickEdit: PropTypes.func,
     onClickFile: PropTypes.func,
     onOpenProjectLibrary: PropTypes.func,
+    onOpenSaveVersionModal: PropTypes.func,
     onClickLogin: PropTypes.func,
     onClickLogo: PropTypes.func,
     onClickMode: PropTypes.func,
@@ -1028,6 +1051,9 @@ const mapStateToProps = (state, ownProps) => {
         aboutMenuOpen: aboutMenuOpen(state),
         accountMenuOpen: accountMenuOpen(state),
         canOpenProjectLibrary: typeof state.scratchGui.config?.storage?.listProjects === 'function',
+        canSaveProjectVersion:
+            typeof state.scratchGui.config?.storage?.saveVersionWithMeta === 'function' &&
+            getIsShowingWithId(loadingState),
         currentLocale: state.locales.locale,
         fileMenuOpen: fileMenuOpen(state),
         editMenuOpen: editMenuOpen(state),
@@ -1092,6 +1118,7 @@ const mapDispatchToProps = (dispatch, ownProps) => ({
     onRequestCloseSettings: () => dispatch(closeSettingsMenu()),
     onClickNew: needSave => dispatch(requestNewProject(needSave)),
     onOpenProjectLibrary: () => dispatch(openProjectLibrary()),
+    onOpenSaveVersionModal: () => dispatch(openSaveVersionModal()),
     onClickRemix: () => dispatch(remixProject()),
     onClickSave: () => dispatch(manualUpdateProject()),
     onClickSaveAsCopy: () => dispatch(saveProjectAsCopy()),
