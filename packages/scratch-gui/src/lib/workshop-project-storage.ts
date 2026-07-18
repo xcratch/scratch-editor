@@ -83,6 +83,39 @@ export class WorkshopProjectStorage extends LegacyStorage {
         });
     }
 
+    /*
+     * Force-saves a new version with a comment and keep flag set at
+     * creation time. Called by project-saver-hoc, either from an extension
+     * block (runtime.saveProjectVersion) or the "Save with a comment" menu
+     * item. Unlike saveProject, the server always creates a new version here
+     * even if the body is unchanged.
+     */
+    async saveVersionWithMeta (
+        projectId: ProjectId,
+        vmState: string,
+        meta: {comment?: string; isKeep?: boolean}
+    ): Promise<{id: ProjectId; timestamp: number}> {
+        if (!this.projectHost) throw new Error('Project host not set');
+        const qs = new URLSearchParams();
+        if (meta.comment) qs.set('comment', meta.comment);
+        if (typeof meta.isKeep === 'boolean') qs.set('isKeep', String(meta.isKeep));
+        const query = qs.toString();
+        const url = this.withAuth(`${this.projectHost}/${projectId}/versions${query ? `?${query}` : ''}`);
+        const res = await fetch(url, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {'Content-Type': 'application/json'},
+            body: vmState
+        });
+        if (!res.ok) throw new Error(`Failed to save version: ${res.status}`);
+        const {versionTimestamp} = await res.json();
+        // Record the new version's timestamp so the saveProjectThumbnail call
+        // that project-saver-hoc issues right after this PUTs the thumbnail
+        // onto this version rather than a stale one.
+        this.lastVersionTimestamp.set(String(projectId), versionTimestamp);
+        return {id: projectId, timestamp: versionTimestamp};
+    }
+
     async listVersions (id: ProjectId): Promise<ProjectVersionItem[]> {
         if (!this.projectHost) return [];
         const res = await fetch(this.withAuth(`${this.projectHost}/${id}/versions`), {
