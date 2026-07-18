@@ -377,6 +377,35 @@ describe('LocalProjectStorage.saveVersionWithMeta', () => {
         expect(deletedTimestamps).not.toContain(versions[44].timestamp);
     });
 
+    test('versions with a comment survive thinning', async () => {
+        const id = '1751400000000';
+        db.getHeader.mockImplementation(headerId => Promise.resolve(
+            headerId === id ? {id, name: 'P', thumbnail: null, created: 1, modified: 1} : null));
+        const now = Date.now();
+        // same fixture as the isKeep test, but the two oldest carry a comment
+        const versions = Array.from({length: 45}, (_, i) => ({
+            projectId: id,
+            timestamp: now - (i * 1000),
+            parentTimestamp: null,
+            body: '{}',
+            thumbnail: null,
+            comment: i >= 43 ? 'milestone' : ''
+        }));
+        db.listVersions.mockResolvedValue(versions);
+        const storage = makeStorage();
+        await storage.saveVersionWithMeta(id, '{"v":46}', {});
+
+        expect(db.deleteVersions).toHaveBeenCalledTimes(1);
+        const deletedTimestamps = db.deleteVersions.mock.calls[0][0].map(([, ts]) => ts);
+        // uncommented thinning candidates are still deleted
+        expect(deletedTimestamps).toEqual([
+            versions[40].timestamp, versions[41].timestamp, versions[42].timestamp
+        ]);
+        // the commented versions among the candidates are spared
+        expect(deletedTimestamps).not.toContain(versions[43].timestamp);
+        expect(deletedTimestamps).not.toContain(versions[44].timestamp);
+    });
+
     test('serializes concurrent saveProject and saveVersionWithMeta on the same project', async () => {
         const id = '1751400000000';
         db.getHeader.mockImplementation(headerId => Promise.resolve(

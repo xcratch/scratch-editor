@@ -179,6 +179,7 @@ const mapStateToProps = (state, ownProps) => {
         platform: ownProps.platform,
         projectId: state.scratchGui.projectState.projectId,
         projectLibraryVisible: state.scratchGui.modals.projectLibrary,
+        saveVersionModalVisible: state.scratchGui.modals.saveVersion,
         soundsTabVisible: state.scratchGui.editorTab.activeTabIndex === SOUNDS_TAB_INDEX,
         targetIsStage: (
             state.scratchGui.targets.stage &&
