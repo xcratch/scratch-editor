@@ -142,6 +142,11 @@ export default async appTarget => {
                 `${api}/store/ws/${slug}/rooms/${roomId}/projects` :
                 `${api}/store/ws/${slug}/projects`}
             assetHost={`${api}/store/ws/${slug}/assets`}
+            // Backpack is per-participant per-workshop (not per-session): the server
+            // ignores the username path segment and resolves the participant from the
+            // cookie session or the ?token= that backpack-api sends as x-token.
+            backpackHost={`${api}/store/ws/${slug}/backpack`}
+            backpackVisible={!isPlayer}
             projectToken={token}
             versionTimestamp={version}
             onUpdateProjectId={updateProjectIdInUrl}
