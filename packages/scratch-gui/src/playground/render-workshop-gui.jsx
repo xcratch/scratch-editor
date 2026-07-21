@@ -23,6 +23,9 @@ import {workshopConfigFactory} from '../workshop-config';
  *               someone else's project" experience); saving is only possible through
  *               remixing, which POSTs a new project with ?original_id=.
  *   api         (optional) API origin; default '' = relative (same-origin via dev proxy)
+ *   session_id  (optional) workshop session id; scopes project creation to the
+ *               session via the backend's /sessions/:sessionId/projects routes.
+ *               Omit to fall back to the workshop's default session.
  *   version     (optional) epoch-ms timestamp of a saved version (Phase 3 project
  *               history). When present, the editor loads that version's body
  *               instead of the current one and is forced read-only (canSave=false),
@@ -49,7 +52,7 @@ const getParams = () => {
         nickname: q.get('nickname'),
         code: q.get('code'),
         isPlayer: q.get('is_player') === 'true',
-        roomId: q.get('room_id'),
+        sessionId: q.get('session_id'),
         // Unknown values fall back to 'edit' so existing URLs keep working.
         mode: q.get('mode') === 'remix' ? 'remix' : 'edit',
         // Version history (Phase 3): epoch-ms timestamp of a saved version, or
@@ -100,7 +103,7 @@ const maybeJoin = async ({api, slug, nickname, code}) => {
 export default async appTarget => {
     GUI.setAppElement(appTarget);
 
-    const {slug, projectId, token, api, nickname, code, isPlayer, roomId, mode, version} = getParams();
+    const {slug, projectId, token, api, nickname, code, isPlayer, sessionId, mode, version} = getParams();
     if (!slug) {
         log.error('Xcratch Workshop: missing required ?slug= query param');
     }
@@ -138,8 +141,8 @@ export default async appTarget => {
             // loads instead (showing "with id"), so this never double-creates.
             canCreateNew={canSave}
             projectId={projectId}
-            projectHost={roomId ?
-                `${api}/store/ws/${slug}/rooms/${roomId}/projects` :
+            projectHost={sessionId ?
+                `${api}/store/ws/${slug}/sessions/${sessionId}/projects` :
                 `${api}/store/ws/${slug}/projects`}
             assetHost={`${api}/store/ws/${slug}/assets`}
             // Backpack is per-participant per-workshop (not per-session): the server
