@@ -1,0 +1,78 @@
+name: Workshop Editor Release
+
+# xcratch-workshop の単一 Web Service イメージが利用する scratch-gui(workshop エントリ)の
+# ビルド成果物を tar.gz にまとめ、GitHub Release アセットとして公開する。
+# - タグ `workshop-editor-v*` の push で Release を作成しアセットを添付
+# - workflow_dispatch では任意ブランチをビルドして workflow artifact のみ保存(検証用)
+
+on:
+  push:
+    tags:
+      - 'workshop-editor-v*'
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to checkout'
+        required: false
+        default: 'xcratch'
+        type: string
+
+concurrency:
+  group: "${{ github.workflow }} @ ${{ github.ref }}"
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build and publish workshop editor
+    runs-on: ubuntu-latest
+    steps:
+      - name: Debug info
+        run: |
+          cat <<EOF
+          Ref: ${{ inputs.branch || github.ref }}
+          Triggered by: ${{ github.actor }}
+          Node version: $(node --version)
+          NPM version: $(npm --version)
+          EOF
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          ref: ${{ inputs.branch || github.ref }}
+
+      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4
+        with:
+          node-version-file: '.nvmrc'
+
+      - uses: ./.github/actions/install-dependencies
+
+      - name: Build packages
+        run: npm run build
+
+      - name: Package workshop editor build
+        run: |
+          cd packages/scratch-gui/build
+          test -f workshop.html # workshop エントリが含まれることを確認
+          # workshop 以外のエントリ HTML は配信不要なので除外(JS/chunks はエントリ間で共有のため残す)
+          rm -f gui.html player.html standalone.html blocks-only.html compatibility-testing.html
+          tar -czf "$GITHUB_WORKSPACE/workshop-editor-build.tar.gz" .
+          ls -lh "$GITHUB_WORKSPACE/workshop-editor-build.tar.gz"
+
+      - name: Store build artifact
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: workshop-editor-build
+          path: workshop-editor-build.tar.gz
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/workshop-editor-v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --title "Workshop Editor ${GITHUB_REF_NAME#workshop-editor-}" \
+            --notes "scratch-gui workshop エントリのビルド成果物 (xcratch-workshop の Docker ビルドが EDITOR_BUILD_URL で参照)。commit: ${GITHUB_SHA}" \
+            workshop-editor-build.tar.gz
