@@ -10,6 +10,7 @@ import VM from '@scratch/scratch-vm';
 import {initializeBlocksToImage} from '../lib/blocks-to-image';
 import {initializeEditValueInEditor} from '../lib/edit-value-in-editor';
 import {initializeListEditor} from '../lib/list-editor';
+import {initializeReportBubbleCopy} from '../lib/report-bubble-copy';
 
 import analytics from '../lib/analytics';
 import log from '../lib/log.js';
@@ -134,6 +135,9 @@ class Blocks extends React.Component {
             this.props.vm,
             this.handleListEditorOpen
         );
+
+        // Make the value-report bubble selectable and copyable
+        initializeReportBubbleCopy(this.ScratchBlocks, this.props.intl.formatMessage);
 
         const workspaceConfig = defaultsDeep({},
             Blocks.defaultOptions,
