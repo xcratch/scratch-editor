@@ -174,7 +174,12 @@ const ProjectSaverHOC = function (WrappedComponent) {
         }
         updateProjectToStorage () {
             this.props.onShowSavingAlert();
-            return this.storeProject(this.props.reduxProjectId)
+            // Always send the current title so renames persist on ordinary saves, not
+            // just copy/remix. Safe for the local storage backend too: it already
+            // accepts params.title and would fall back to the same redux title anyway.
+            return this.storeProject(this.props.reduxProjectId, {
+                title: this.props.reduxProjectTitle
+            })
                 .then(() => {
                     // there's an http response object available here, but we don't need to examine
                     // it, because there are no values contained in it that we care about
