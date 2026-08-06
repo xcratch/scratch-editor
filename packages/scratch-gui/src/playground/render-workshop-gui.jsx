@@ -26,6 +26,11 @@ import {workshopConfigFactory} from '../workshop-config';
  *   session_id  (optional) workshop session id; scopes project creation to the
  *               session via the backend's /sessions/:sessionId/projects routes.
  *               Omit to fall back to the workshop's default session.
+ *   title       (optional) the project's current title from the workshop DB, shown
+ *               in the editor's title input. Omitted for new projects, where the
+ *               editor falls back to 'Untitled' (the backend's default) instead of
+ *               scratch-gui's localized "Scratch Project", so the first save doesn't
+ *               rename the project.
  *   version     (optional) epoch-ms timestamp of a saved version (Phase 3 project
  *               history). When present, the editor loads that version's body
  *               instead of the current one and is forced read-only (canSave=false),
@@ -53,6 +58,7 @@ const getParams = () => {
         code: q.get('code'),
         isPlayer: q.get('is_player') === 'true',
         sessionId: q.get('session_id'),
+        title: q.get('title'),
         // Unknown values fall back to 'edit' so existing URLs keep working.
         mode: q.get('mode') === 'remix' ? 'remix' : 'edit',
         // Version history (Phase 3): epoch-ms timestamp of a saved version, or
@@ -103,7 +109,7 @@ const maybeJoin = async ({api, slug, nickname, code}) => {
 export default async appTarget => {
     GUI.setAppElement(appTarget);
 
-    const {slug, projectId, token, api, nickname, code, isPlayer, sessionId, mode, version} = getParams();
+    const {slug, projectId, token, api, nickname, code, isPlayer, sessionId, title, mode, version} = getParams();
     if (!slug) {
         log.error('Xcratch Workshop: missing required ?slug= query param');
     }
@@ -141,6 +147,7 @@ export default async appTarget => {
             // loads instead (showing "with id"), so this never double-creates.
             canCreateNew={canSave}
             projectId={projectId}
+            projectTitle={title || 'Untitled'}
             projectHost={sessionId ?
                 `${api}/store/ws/${slug}/sessions/${sessionId}/projects` :
                 `${api}/store/ws/${slug}/projects`}
