@@ -13,6 +13,21 @@ const Color = require('../util/color');
 
 class Cast {
     /**
+     * Normalize full-width digits/signs to half-width for number parsing.
+     * Non-string values are returned unchanged.
+     * @param {*} value Value to normalize.
+     * @returns {*} Normalized value.
+     */
+    static normalizeNumberString (value) {
+        if (typeof value === 'string') {
+            // Replace full-width numbers with half-width ones.
+            value = value.replace(/[０-９＋．ｅ]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
+            value = value.replace(/[-－﹣−‐⁃‑‒–—﹘―⎯⏤ーｰ─━]/g, '-');
+        }
+        return value;
+    }
+
+    /**
      * Scratch cast to number.
      * Treats NaN as 0.
      * In Scratch 2.0, this is captured by `interp.numArg.`
@@ -30,11 +45,7 @@ class Cast {
             }
             return value;
         }
-        if (typeof value === 'string') {
-            // Replace full-width numbers with half-width ones.
-            value = value.replace(/[０-９＋．ｅ]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
-            value = value.replace(/[-－﹣−‐⁃‑‒–—﹘―⎯⏤ーｰ─━]/g, '-');
-        }
+        value = Cast.normalizeNumberString(value);
         const n = Number(value);
         if (Number.isNaN(n)) {
             // Scratch treats NaN as 0, when needed as a number.
@@ -124,8 +135,8 @@ class Cast {
      * @returns {number} Negative number if v1 < v2; 0 if equal; positive otherwise.
      */
     static compare (v1, v2) {
-        let n1 = Number(v1);
-        let n2 = Number(v2);
+        let n1 = Number(Cast.normalizeNumberString(v1));
+        let n2 = Number(Cast.normalizeNumberString(v2));
         if (n1 === 0 && Cast.isWhiteSpace(v1)) {
             n1 = NaN;
         } else if (n2 === 0 && Cast.isWhiteSpace(v2)) {

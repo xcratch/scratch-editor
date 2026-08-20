@@ -14,6 +14,13 @@ test('toNumber', t => {
     t.equal(cast.toNumber('0.1e10'), 1000000000);
     t.equal(cast.toNumber('foobar'), 0);
 
+    // Full-width string
+    t.equal(cast.toNumber('１０'), 10);
+    t.equal(cast.toNumber('３.１４'), 3.14);
+    t.equal(cast.toNumber('３．１４'), 3.14);
+    t.equal(cast.toNumber('－５'), -5);
+    t.equal(cast.toNumber('＋５'), 5);
+
     // Boolean
     t.equal(cast.toNumber(true), 1);
     t.equal(cast.toNumber(false), 0);
@@ -124,6 +131,14 @@ test('compare', t => {
     t.equal(cast.compare('0.1e10', '1000000000'), 0);
     t.equal(cast.compare('foobar', 'FOOBAR'), 0);
     t.ok(cast.compare('dog', 'cat') > 0);
+
+    // Full-width string is compared as a number
+    t.equal(cast.compare('１０', '10'), 0);
+    t.equal(cast.compare('１０', 10), 0);
+    t.ok(cast.compare('１０', 9) > 0);
+    t.ok(cast.compare('２', '10') < 0);
+    // Non-numeric strings still fall back to string comparison
+    t.ok(cast.compare('あ', '１０') !== 0);
 
     // Boolean
     t.equal(cast.compare(true, true), 0);
