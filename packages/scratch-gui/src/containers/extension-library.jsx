@@ -79,7 +79,9 @@ const messages = defineMessages({
 
 /**
  * Holds the preloaded extensions
- * @type {Array<{entry: object, blockClass: object|null, url: string,
+ * - url: source URL listed in preload-rules.json (entry-only module for separate type)
+ * - extensionURL: URL of the module which contains the blockClass (used as the module URL of the extension)
+ * @type {Array<{entry: object, blockClass: object|null, url: string, extensionURL: string,
  * isSeparate: boolean, blockClassContextKey?: string}>}
  */
 let preloadedExtensions = [];
@@ -158,6 +160,9 @@ const loadModules = async () => {
                     
                     const dirPath = pathMatch[1];
                     const filesInDir = filesByDirectory.get(dirPath);
+                    // URL of the module which contains the blockClass.
+                    // For entry-only source, preload.mjs records the resolved extensionURL of the entry.
+                    const extensionURL = ext.extensionURL || ext.url;
                     
                     if (!filesInDir) {
                         log.warn(`No files found for extension: ${ext.path}`);
@@ -176,6 +181,7 @@ const loadModules = async () => {
                             entry: entryModule.entry,
                             blockClass: null,
                             url: ext.url,
+                            extensionURL: extensionURL,
                             isSeparate: true,
                             blockClassContextKey: filesInDir.extension
                         };
@@ -187,6 +193,7 @@ const loadModules = async () => {
                             entry: extensionModule.entry,
                             blockClass: extensionModule.blockClass,
                             url: ext.url,
+                            extensionURL: extensionURL,
                             isSeparate: false
                         };
                     }
@@ -214,13 +221,15 @@ const loadModules = async () => {
         });
 
         // Register all preloaded extensions to the library
-        preloadedExtensions.forEach(({entry, url}) => {
+        preloadedExtensions.forEach(({entry, extensionURL}) => {
             entry.category = 'preloaded';
-            entry.extensionURL = url;
+            // Use the URL of the module which contains the blockClass as the module URL of the extension,
+            // so that the library card and the saved project refer to a loadable module.
+            entry.extensionURL = extensionURL;
             // Check if extension is already in the library to prevent duplicates
             const existingIndex = extensionLibraryContent.findIndex(
                 item => item.extensionId === entry.extensionId ||
-                        (item.extensionURL && item.extensionURL === url)
+                        (item.extensionURL && item.extensionURL === extensionURL)
             );
             if (existingIndex === -1) {
                 extensionLibraryContent.push(entry);
@@ -260,9 +269,11 @@ class ExtensionLibrary extends React.PureComponent {
         if (!preloaded) {
             // Set preloaded extensions into VM for fallback when loading extension class from URL.
             // Only register integrated type extensions (those with blockClass already loaded)
-            preloadedExtensions.forEach(({entry, blockClass, isSeparate, url}) => {
+            preloadedExtensions.forEach(({entry, blockClass, isSeparate, extensionURL}) => {
                 if (!isSeparate && blockClass) {
-                    log.info(`Registering preloaded integrated extension: ${entry.extensionId} with URL: ${url}`);
+                    log.info(
+                        `Registering preloaded integrated extension: ${entry.extensionId} with URL: ${extensionURL}`
+                    );
                     this.props.vm.extensionManager
                         .registerExtensionBlock(entry, blockClass, true); // true: preloaded
                 }

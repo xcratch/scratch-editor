@@ -229,6 +229,35 @@ class ExtensionManager {
     }
 
     /**
+     * Resolve a module URL which may be relative against the base URL.
+     * @param {string} url - absolute URL or path relative to baseURL.
+     * @param {string} baseURL - URL to resolve a relative path against.
+     * @returns {string} absolute URL.
+     */
+    resolveModuleURL (url, baseURL) {
+        if (url.match(/^https?:\/\//)) {
+            return url;
+        }
+        const base = new URL(baseURL, window.location.href);
+        return new URL(url, base).href;
+    }
+
+    /**
+     * Import the module which exports the block class.
+     * @param {string} blockClassURL - absolute URL for module of the block class.
+     * @returns {Promise<BlockClass>} block class exported by the module.
+     */
+    fetchBlockClass (blockClassURL) {
+        return import(/* webpackIgnore: true */ blockClassURL)
+            .then(blockModule => {
+                if (!blockModule.blockClass) {
+                    throw new Error(`blockClass not found in module for ${blockClassURL}`);
+                }
+                return blockModule.blockClass;
+            });
+    }
+
+    /**
      * Fetch URL and return entry object and block class of the extension.
      * @param {string} extensionURL - URL for module of the extension.
      * @returns {{entry: object, blockClass: BlockClass}} Array with entry and block class of the extension.
@@ -240,35 +269,43 @@ class ExtensionManager {
                     throw new Error(`Entry not found in module for ${extensionURL}`);
                 }
                 const entry = module.entry;
+                // extensionURL declared in the entry: for an entry-only module it points to the module
+                // which contains the blockClass. Keep it before overwriting with the loaded URL.
+                const declaredURL = entry.extensionURL;
                 entry.extensionURL = extensionURL;
-                
+
                 // If entry has blockClassURL, import blockClass from that URL
                 if (entry.blockClassURL) {
-                    // If blockClassURL is relative, resolve it against extensionURL
-                    let blockClassURL = entry.blockClassURL;
-                    if (!blockClassURL.match(/^https?:\/\//)) {
-                        // Relative path - resolve against extensionURL
-                        const baseURL = new URL(extensionURL, window.location.href);
-                        blockClassURL = new URL(blockClassURL, baseURL).href;
-                    }
-                    return import(/* webpackIgnore: true */ blockClassURL)
-                        .then(blockModule => {
-                            if (!blockModule.blockClass) {
-                                throw new Error(`blockClass not found in module for ${blockClassURL}`);
-                            }
-                            const blockClass = blockModule.blockClass;
+                    const blockClassURL = this.resolveModuleURL(entry.blockClassURL, extensionURL);
+                    return this.fetchBlockClass(blockClassURL)
+                        .then(blockClass => {
                             blockClass.extensionURL = extensionURL;
                             return {entry: entry, blockClass: blockClass};
                         });
                 }
-                
+
                 // Otherwise, use blockClass from the same module (old format)
-                if (!module.blockClass) {
-                    throw new Error(`blockClass not found in module for ${extensionURL}`);
+                if (module.blockClass) {
+                    const blockClass = module.blockClass;
+                    blockClass.extensionURL = extensionURL;
+                    return {entry: entry, blockClass: blockClass};
                 }
-                const blockClass = module.blockClass;
-                blockClass.extensionURL = extensionURL;
-                return {entry: entry, blockClass: blockClass};
+
+                // Entry-only module: the declared extensionURL points to the module which contains the blockClass.
+                const blockClassURL = (typeof declaredURL === 'string' && declaredURL) ?
+                    this.resolveModuleURL(declaredURL, extensionURL) :
+                    null;
+                if (blockClassURL && blockClassURL !== extensionURL) {
+                    return this.fetchBlockClass(blockClassURL)
+                        .then(blockClass => {
+                            // Record the blockClass module URL as the module URL of the extension
+                            // so that the project can be re-loaded from it.
+                            entry.extensionURL = blockClassURL;
+                            blockClass.extensionURL = blockClassURL;
+                            return {entry: entry, blockClass: blockClass};
+                        });
+                }
+                throw new Error(`blockClass not found in module for ${extensionURL}`);
             });
     }
 

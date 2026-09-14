@@ -99,7 +99,9 @@ const preloadDir = path.join(basePath, 'preload');
 /**
  * Download extension to local
  * @param {string} url URL to download
- * @returns {string} relative path for the downloaded file
+ * @returns {{path: string, extensionURL: string}} relative path for the downloaded file
+ * and the URL of the module which contains the blockClass
+ * (the resolved `extensionURL` of the entry for entry-only source, otherwise the source URL)
  */
 const downloadExtension = async url => {
     console.info(`Downloading extension: ${url}`);
@@ -137,20 +139,25 @@ const downloadExtension = async url => {
         const blockClassContent = await blockClassResponse.text();
         
         // Validate blockClass content
-        if (!blockClassContent.trim()) {
-            throw new Error('Invalid blockClass content');
+        if (!blockClassContent.trim() || !blockClassContent.includes('blockClass')) {
+            throw new Error(`blockClass not found in module for ${resolvedURL}`);
         }
-        
+
         // Save as extension.mjs
         const extPath = path.join(extDir, 'extension.mjs');
         fs.writeFileSync(extPath, blockClassContent);
-        return path.relative(preloadDir, extPath);
+        return {
+            path: path.relative(preloadDir, extPath),
+            extensionURL: resolvedURL
+        };
     }
     // Save as extension.mjs (original behavior)
     const extPath = path.join(extDir, 'extension.mjs');
     fs.writeFileSync(extPath, content);
-    return path.relative(preloadDir, extPath);
-    
+    return {
+        path: path.relative(preloadDir, extPath),
+        extensionURL: url
+    };
 };
 
 // Preload extensions
@@ -161,8 +168,8 @@ const preload = async () => {
         // Download the approved extension
         for (const url of rules.approved) {
             try {
-                const extPath = await downloadExtension(url);
-                downloadedExtensions.push({url: url, path: extPath});
+                const {path: extPath, extensionURL} = await downloadExtension(url);
+                downloadedExtensions.push({url: url, path: extPath, extensionURL: extensionURL});
             } catch (error) {
                 console.warn(`Failed to process approved extension ${url}:`, error.message);
                 continue; // Skip to next approved extension

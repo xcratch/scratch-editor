@@ -304,7 +304,10 @@ preload-rules.json から承認済みURLリストを読み込み
   ↓
 ダウンロード成功した拡張機能のリストを
 preload/preload.json に出力
-  └─ [{url: "...", path: "..."}]
+  └─ [{url: "...", path: "...", extensionURL: "..."}]
+      ├─ url: preload-rules.json に書かれたソース URL
+      └─ extensionURL: blockClass を含むモジュールの URL
+          (Separate型では entry の extensionURL を解決した body の URL、Integrated型では url と同じ)
 ```
 
 ##### 2. ランタイムロード (アプリ起動時)
@@ -337,7 +340,8 @@ require.context() で preload/**/(entry|extension).mjs を登録
   ↓
 extensionLibraryContent に追加
   ├─ category を 'preloaded' に設定
-  ├─ extensionURL を設定
+  ├─ extensionURL に preload.json の extensionURL (blockClass を含むモジュールの URL) を設定
+  │   └─ カードの "Module:" 表示・プロジェクトに保存される URL はこの値になる
   └─ 重複チェック (extensionId または extensionURL で判定)
   ↓
 拡張機能ライブラリに表示可能
