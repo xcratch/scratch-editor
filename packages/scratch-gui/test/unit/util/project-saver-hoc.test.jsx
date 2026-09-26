@@ -2,7 +2,7 @@ import 'web-audio-test-api';
 
 import React from 'react';
 import configureStore from 'redux-mock-store';
-import {render} from '@testing-library/react';
+import {render, waitFor} from '@testing-library/react';
 import {LoadingState} from '../../../src/reducers/project-state';
 import VM from '@scratch/scratch-vm';
 import {legacyConfig} from '../../../src/legacy-config';
@@ -665,5 +665,175 @@ describe('projectSaverHOC', () => {
         unmount();
         expect(setSaver).toHaveBeenCalledTimes(2);
         expect(setSaver.mock.calls[1][0]).toBe(null);
+    });
+
+    // Regression tests for a production crash: vm.toJSON() threw synchronously
+    // (TypeError inside sb3 serialize) from inside storeProject(), which is called
+    // directly from componentDidUpdate rather than from inside a promise chain.
+    // The synchronous throw escaped storeProject() entirely, propagated out of
+    // componentDidUpdate, and was caught by the top-level ErrorBoundary, turning a
+    // recoverable save failure into a full editor crash. A rejected save (e.g. a
+    // dropped connection) must be handled the same non-fatal way.
+    describe('save failures do not crash the editor', () => {
+        test('if vm.toJSON throws during an overwrite save, it does not throw ' +
+            'synchronously and shows the savingError alert instead', async () => {
+            jest.useRealTimers();
+            vm.toJSON = jest.fn(() => {
+                throw new TypeError('Cannot read properties of undefined (reading \'value\')');
+            });
+            const mockedOnShowAlert = jest.fn();
+            const mockedOnProjectError = jest.fn();
+            const mockedOnUpdatedProject = jest.fn();
+            const Component = () => <div />;
+            const WrappedComponent = projectSaverHOC(Component);
+            const {rerender} = render(
+                <WrappedComponent
+                    canSave
+                    isCreatingNew={false}
+                    isShowingWithId={false}
+                    isShowingWithoutId={false}
+                    isUpdating={false}
+                    loadingState={LoadingState.SHOWING_WITH_ID}
+                    reduxProjectId={'100'}
+                    store={store}
+                    vm={vm}
+                    onShowAlert={mockedOnShowAlert}
+                    onProjectError={mockedOnProjectError}
+                    onUpdatedProject={mockedOnUpdatedProject}
+                />
+            );
+            // Entering the updating state triggers updateProjectToStorage -> storeProject
+            // -> vm.toJSON() synchronously, from inside componentDidUpdate. This must not
+            // throw back out of render/rerender.
+            expect(() => {
+                rerender(
+                    <WrappedComponent
+                        canSave
+                        isCreatingNew={false}
+                        isShowingWithId={false}
+                        isShowingWithoutId={false}
+                        isUpdating
+                        loadingState={LoadingState.MANUAL_UPDATING}
+                        reduxProjectId={'100'}
+                        store={store}
+                        vm={vm}
+                        onShowAlert={mockedOnShowAlert}
+                        onProjectError={mockedOnProjectError}
+                        onUpdatedProject={mockedOnUpdatedProject}
+                    />
+                );
+            }).not.toThrow();
+
+            await waitFor(() => {
+                expect(mockedOnShowAlert).toHaveBeenCalledWith('savingError');
+                expect(mockedOnProjectError).toHaveBeenCalled();
+            });
+            // The success path (which would clear projectChanged) must not run.
+            expect(mockedOnUpdatedProject).not.toHaveBeenCalled();
+        });
+
+        test('if the save request rejects during an overwrite save, ' +
+            'it shows the savingError alert instead of going to the error state', async () => {
+            jest.useRealTimers();
+            vm.toJSON = jest.fn(() => '{"targets":[]}');
+            const mockedOnUpdateProjectData = jest.fn(() => Promise.reject(new Error('network down')));
+            const mockedOnShowAlert = jest.fn();
+            const mockedOnProjectError = jest.fn();
+            const mockedOnUpdatedProject = jest.fn();
+            const Component = () => <div />;
+            const WrappedComponent = projectSaverHOC(Component);
+            const {rerender} = render(
+                <WrappedComponent
+                    canSave
+                    isCreatingNew={false}
+                    isShowingWithId={false}
+                    isShowingWithoutId={false}
+                    isUpdating={false}
+                    loadingState={LoadingState.SHOWING_WITH_ID}
+                    reduxProjectId={'100'}
+                    store={store}
+                    vm={vm}
+                    onUpdateProjectData={mockedOnUpdateProjectData}
+                    onShowAlert={mockedOnShowAlert}
+                    onProjectError={mockedOnProjectError}
+                    onUpdatedProject={mockedOnUpdatedProject}
+                />
+            );
+            rerender(
+                <WrappedComponent
+                    canSave
+                    isCreatingNew={false}
+                    isShowingWithId={false}
+                    isShowingWithoutId={false}
+                    isUpdating
+                    loadingState={LoadingState.MANUAL_UPDATING}
+                    reduxProjectId={'100'}
+                    store={store}
+                    vm={vm}
+                    onUpdateProjectData={mockedOnUpdateProjectData}
+                    onShowAlert={mockedOnShowAlert}
+                    onProjectError={mockedOnProjectError}
+                    onUpdatedProject={mockedOnUpdatedProject}
+                />
+            );
+
+            await waitFor(() => {
+                expect(mockedOnShowAlert).toHaveBeenCalledWith('savingError');
+                expect(mockedOnProjectError).toHaveBeenCalled();
+            });
+            expect(mockedOnUpdatedProject).not.toHaveBeenCalled();
+        });
+
+        test('after a failed save leaves projectChanged true, auto-save is ' +
+            'rescheduled at the normal interval (not an immediate/fast retry loop)', () => {
+            const mockedAutoUpdate = jest.fn(() => Promise.resolve());
+            const mockedStoreProject = jest.fn(() => Promise.resolve());
+            const Component = () => <div />;
+            const WrappedComponent = projectSaverHOC(Component);
+            // The first wrapper is redux's Connect HOC
+            WrappedComponent.WrappedComponent.prototype.storeProject = mockedStoreProject;
+            const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+            const {rerender} = render(
+                <WrappedComponent
+                    canSave
+                    isShowingSaveable
+                    isShowingWithId
+                    isUpdating
+                    projectChanged
+                    autoSaveIntervalSecs={600}
+                    loadingState={LoadingState.MANUAL_UPDATING}
+                    store={store}
+                    vm={vm}
+                    onAutoUpdateProject={mockedAutoUpdate}
+                />
+            );
+            setTimeoutSpy.mockClear();
+            // Simulate the save failing: isUpdating clears (the reducer sends a
+            // non-fatal save error back to SHOWING_WITH_ID) but projectChanged was
+            // never cleared, because onSetProjectUnchanged only runs on success.
+            rerender(
+                <WrappedComponent
+                    canSave
+                    isShowingSaveable
+                    isShowingWithId
+                    isUpdating={false}
+                    projectChanged
+                    autoSaveIntervalSecs={600}
+                    loadingState={LoadingState.SHOWING_WITH_ID}
+                    store={store}
+                    vm={vm}
+                    onAutoUpdateProject={mockedAutoUpdate}
+                />
+            );
+
+            // A new auto-save timer must have been scheduled at the normal interval.
+            expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 600 * 1000);
+            expect(mockedAutoUpdate).not.toHaveBeenCalled();
+
+            jest.runAllTimers();
+            expect(mockedAutoUpdate).toHaveBeenCalledTimes(1);
+
+            setTimeoutSpy.mockRestore();
+        });
     });
 });
