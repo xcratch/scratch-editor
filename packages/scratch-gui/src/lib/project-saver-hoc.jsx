@@ -96,6 +96,14 @@ const ProjectSaverHOC = function (WrappedComponent) {
             if (this.props.projectChanged && !prevProps.projectChanged) {
                 this.scheduleAutoSave();
             }
+            if (prevProps.isUpdating && !this.props.isUpdating && this.props.projectChanged) {
+                // A save attempt (auto-save or manual overwrite) just finished, but
+                // projectChanged is still true. On success it would already have been
+                // cleared (see onSetProjectUnchanged in storeProject's .then), so this
+                // means the save failed. Reschedule auto-save so the failure is retried
+                // after the normal interval instead of being dropped until the next edit.
+                this.scheduleAutoSave();
+            }
             if (this.props.isUpdating && !prevProps.isUpdating) {
                 this.updateProjectToStorage();
             }
@@ -274,7 +282,19 @@ const ProjectSaverHOC = function (WrappedComponent) {
             // while in the process of saving a project (e.g. the
             // serialized project refers to a newer asset than what
             // we just finished saving).
-            const savedVMState = this.props.vm.toJSON();
+            //
+            // Wrapped in try/catch so a serialize failure (e.g. vm.toJSON()
+            // throwing) becomes a rejected promise instead of a synchronous
+            // throw escaping storeProject(): an uncaught throw here would
+            // propagate out of componentDidUpdate and hit the top-level
+            // ErrorBoundary instead of the normal save-error handling below.
+            let savedVMState;
+            try {
+                savedVMState = this.props.vm.toJSON();
+            } catch (err) {
+                log.error(err);
+                return Promise.reject(err);
+            }
             const scratchStorage = this.props.storage.scratchStorage;
 
             const saveProject = options?.saveFn ||
