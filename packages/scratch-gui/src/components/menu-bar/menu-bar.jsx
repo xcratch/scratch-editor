@@ -37,6 +37,7 @@ import {
     openSaveVersionModal
 } from '../../reducers/modals';
 import {setPlayer} from '../../reducers/mode';
+import {setProjectChanged} from '../../reducers/project-changed';
 import {
     isTimeTravel220022BC,
     isTimeTravel1920,
@@ -198,6 +199,7 @@ class MenuBar extends React.Component {
             'handleClickSaveAsCopy',
             'handleClickSaveVersion',
             'handleClickSeeCommunity',
+            'handleTitleChanged',
             'handleClickShare',
             'handleSetMode',
             'handleKeyPress',
@@ -238,6 +240,16 @@ class MenuBar extends React.Component {
     handleClickSave () {
         this.props.onClickSave();
         this.props.onRequestCloseFile();
+    }
+    handleTitleChanged () {
+        // A title-only rename never marks the project changed, so without this it
+        // would not reach the server until some other edit or a manual save.
+        // Mark it changed (so a save that is skipped or fails gets retried by the
+        // auto-save logic) and save right away.
+        if (this.props.canSave) {
+            this.props.onProjectChanged();
+            this.props.autoUpdateProject();
+        }
     }
     handleClickSaveVersion () {
         this.props.onOpenSaveVersionModal();
@@ -688,6 +700,7 @@ class MenuBar extends React.Component {
                             >
                                 <ProjectTitleInput
                                     className={classNames(styles.titleFieldGrowable)}
+                                    onTitleChanged={this.handleTitleChanged}
                                 />
                             </MenuBarItemTooltip>
                         </div>
@@ -1011,6 +1024,7 @@ MenuBar.propTypes = {
     onClickRemix: PropTypes.func,
     onClickSave: PropTypes.func,
     onClickSaveAsCopy: PropTypes.func,
+    onProjectChanged: PropTypes.func,
     onClickSettings: PropTypes.func,
     onLogOut: PropTypes.func,
     onOpenRegistration: PropTypes.func,
@@ -1133,6 +1147,7 @@ const mapDispatchToProps = (dispatch, ownProps) => ({
     onClickRemix: () => dispatch(remixProject()),
     onClickSave: () => dispatch(manualUpdateProject()),
     onClickSaveAsCopy: () => dispatch(saveProjectAsCopy()),
+    onProjectChanged: () => dispatch(setProjectChanged()),
     onSeeCommunity: ownProps.onSeeCommunity ?? (() => dispatch(setPlayer(true))),
     onSetTimeTravelMode: mode => dispatch(setTimeTravel(mode))
 });
