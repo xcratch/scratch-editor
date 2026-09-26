@@ -2,7 +2,9 @@ import React from 'react';
 import {renderWithIntl} from '../../helpers/intl-helpers.jsx';
 import MenuBar from '../../../src/components/menu-bar/menu-bar';
 import {menuInitialState} from '../../../src/reducers/menus';
-import {LoadingState} from '../../../src/reducers/project-state';
+import {LoadingState, autoUpdateProject} from '../../../src/reducers/project-state';
+import {setProjectChanged} from '../../../src/reducers/project-changed';
+import {setProjectTitle} from '../../../src/reducers/project-title';
 import {DEFAULT_MODE} from '../../../src/lib/settings/color-mode';
 import {fireEvent, screen} from '@testing-library/react';
 
@@ -130,6 +132,75 @@ describe('MenuBar Component', () => {
             );
 
             expect(screen.queryByText('Save with a comment')).toBeFalsy();
+        });
+    });
+
+    describe('project title input', () => {
+        const getStoreWithTitle = () => configureStore()({
+            locales: {
+                isRtl: false,
+                locale: 'en-US'
+            },
+            scratchGui: {
+                alerts: {
+                    alertsList: []
+                },
+                menus: menuInitialState,
+                projectState: {
+                    loadingState: LoadingState.SHOWING_WITH_ID
+                },
+                projectTitle: 'Old title',
+                settings: {
+                    colorMode: DEFAULT_MODE
+                },
+                timeTravel: {
+                    year: 'NOW'
+                },
+                vm: new VM(),
+                platform: {
+                    platform: PLATFORM.WEB
+                }
+            }
+        });
+        const renderTitle = props => {
+            const titleStore = getStoreWithTitle();
+            renderWithIntl(
+                <Provider store={titleStore}>
+                    <MenuBar
+                        canEditTitle
+                        {...props}
+                    />
+                </Provider>
+            );
+            return {titleStore, input: screen.getByDisplayValue('Old title')};
+        };
+
+        test('renaming saves the project right away when it can be saved', () => {
+            const {titleStore, input} = renderTitle({canSave: true});
+            fireEvent.change(input, {target: {value: 'New title'}});
+            fireEvent.blur(input);
+
+            expect(titleStore.getActions()).toEqual([
+                setProjectTitle('New title'),
+                setProjectChanged(),
+                autoUpdateProject()
+            ]);
+        });
+
+        test('leaving the title unchanged does not save', () => {
+            const {titleStore, input} = renderTitle({canSave: true});
+            fireEvent.change(input, {target: {value: 'Old title'}});
+            fireEvent.blur(input);
+
+            expect(titleStore.getActions()).toEqual([]);
+        });
+
+        test('renaming only updates the title when the project cannot be saved', () => {
+            const {titleStore, input} = renderTitle({canSave: false});
+            fireEvent.change(input, {target: {value: 'New title'}});
+            fireEvent.blur(input);
+
+            expect(titleStore.getActions()).toEqual([setProjectTitle('New title')]);
         });
     });
 });

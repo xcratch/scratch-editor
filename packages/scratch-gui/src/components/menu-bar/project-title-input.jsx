@@ -1,7 +1,7 @@
 import classNames from 'classnames';
 import {connect} from 'react-redux';
 import PropTypes from 'prop-types';
-import React from 'react';
+import React, {useCallback} from 'react';
 import {defineMessages, useIntl} from 'react-intl';
 import {setProjectTitle} from '../../reducers/project-title';
 
@@ -22,9 +22,17 @@ const messages = defineMessages({
 const ProjectTitleInput = ({
     className,
     onSubmit,
+    onTitleChanged,
     projectTitle
 }) => {
     const intl = useIntl();
+    // BufferedInput submits on blur whenever the field was typed in, even if the
+    // value ends up unchanged; only report real renames.
+    const handleSubmit = useCallback(title => {
+        if (title === projectTitle) return;
+        onSubmit(title);
+        if (onTitleChanged) onTitleChanged(title);
+    }, [onSubmit, onTitleChanged, projectTitle]);
     return (
         <BufferedInput
             className={classNames(styles.titleField, className)}
@@ -33,7 +41,7 @@ const ProjectTitleInput = ({
             tabIndex="0"
             type="text"
             value={projectTitle}
-            onSubmit={onSubmit}
+            onSubmit={handleSubmit}
         />
     );
 };
@@ -41,6 +49,7 @@ const ProjectTitleInput = ({
 ProjectTitleInput.propTypes = {
     className: PropTypes.string,
     onSubmit: PropTypes.func,
+    onTitleChanged: PropTypes.func,
     projectTitle: PropTypes.string
 };
 
