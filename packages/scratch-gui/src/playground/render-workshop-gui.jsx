@@ -1,9 +1,11 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 import ReactDomClient from 'react-dom/client';
 
 import AppStateHOC from '../lib/app-state-hoc.jsx';
 import GUI from '../containers/gui.jsx';
 import log from '../lib/log.js';
+import WorkshopSaveBridge from './workshop-save-bridge.jsx';
 import {workshopConfigFactory} from '../workshop-config';
 
 /*
@@ -38,6 +40,21 @@ import {workshopConfigFactory} from '../workshop-config';
  *               overwrite the live project with old content.
  *   nickname,code (optional, dev convenience) self-join before rendering to obtain
  *                 the participant cookie, so save works from a single URL.
+ *
+ * postMessage protocol with the embedding (same-origin) parent page:
+ *   editor -> parent  {type: 'xcratch-workshop:project-id-updated', projectId}
+ *                     sent when saving created/remixed a project.
+ *   parent -> editor  {type: 'xcratch-workshop:save-request', requestId}
+ *                     asks the editor to save unsaved changes (e.g. before the parent
+ *                     closes the editor). Only accepted from window.parent.
+ *   editor -> parent  {type: 'xcratch-workshop:save-ack', requestId}
+ *                     sent immediately, so the parent can tell an old editor build
+ *                     without this API (no ack) from a slow save.
+ *   editor -> parent  {type: 'xcratch-workshop:save-result', requestId, ok, saved}
+ *                     sent when done. ok=false means unsaved changes remain (save
+ *                     failed or the project is not in a savable state); saved=true
+ *                     means a save was actually performed. Nothing to save, or a
+ *                     read-only editor (canSave=false), yields {ok: true, saved: false}.
  */
 
 // scratch-gui's hardcoded default (empty) project id. Passing this as projectId makes
@@ -85,6 +102,17 @@ const updateProjectIdInUrl = id => {
     }
 };
 
+// Rendered inside AppStateHOC's redux Provider so the bridge can reach the store.
+const WorkshopGUI = props => (
+    <React.Fragment>
+        <WorkshopSaveBridge canSave={props.canSave} />
+        <GUI {...props} />
+    </React.Fragment>
+);
+WorkshopGUI.propTypes = {
+    canSave: PropTypes.bool
+};
+
 const onClickLogo = () => {
     const api = (new URLSearchParams(window.location.search).get('api') || '').replace(/\/$/, '');
     window.location = `${api}/`;
@@ -127,7 +155,7 @@ export default async appTarget => {
 
     await maybeJoin({api, slug, nickname, code});
 
-    const WrappedGui = AppStateHOC(GUI, false, workshopConfigFactory);
+    const WrappedGui = AppStateHOC(WorkshopGUI, false, workshopConfigFactory);
 
     const root = ReactDomClient.createRoot(appTarget);
 
