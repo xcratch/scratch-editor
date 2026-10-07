@@ -69,6 +69,12 @@
     <title><%= htmlWebpackPlugin.options.title %></title>
   </head>
   <body>
+    <!--
+      Scratch Link Safari helpers (Scratch Link for Safari, Scrub on iPad, ...) look for this element
+      when the page has been loaded. The VM creates it too, but too late because it is instantiated
+      while rendering asynchronously, so the element has to be in the static HTML.
+    -->
+    <script id="scratch-link-extension-script"></script>
     <% if (htmlWebpackPlugin.options.gtm_id) { %>
       <!-- Google Tag Manager (noscript) -->
       <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=<%- htmlWebpackPlugin.options.gtm_id %><%= htmlWebpackPlugin.options.gtm_env_auth %>" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
