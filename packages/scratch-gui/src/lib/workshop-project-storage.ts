@@ -1,6 +1,7 @@
 import {Asset} from 'scratch-storage';
 
 import {LegacyStorage} from './legacy-storage';
+import log from './log';
 import {ProjectId, ProjectVersionItem, VersionDiff} from '../gui-config';
 
 /*
@@ -14,6 +15,20 @@ interface ServerVersionItem {
     isKeep: boolean;
     diff: VersionDiff;
     hasThumbnail: boolean;
+}
+
+/*
+ * How long a freshly created version waits for its thumbnail upload to be
+ * started before we give up waiting (the thumbnail is not always requested,
+ * e.g. when the renderer is unavailable), and how long to pause before the
+ * single retry of a failed thumbnail upload.
+ */
+const THUMBNAIL_START_TIMEOUT_MS = 5000;
+const THUMBNAIL_RETRY_DELAY_MS = 500;
+
+interface PendingThumbnail {
+    promise: Promise<void>;
+    settle: () => void;
 }
 
 interface ListVersionsResponse {
@@ -40,6 +55,13 @@ export class WorkshopProjectStorage extends LegacyStorage {
     // which version the incoming thumbnail belongs to.
     private readonly lastVersionTimestamp = new Map<string, number>();
 
+    // Thumbnails that were announced by a save (a version was created) but whose
+    // upload has not finished yet, keyed by `${projectId}/${timestamp}`. The
+    // embedding page waits for these (see waitForPendingThumbnail) before it
+    // destroys the iframe, otherwise the in-flight PUT is aborted and the version
+    // is left without a thumbnail.
+    private readonly pendingThumbnails = new Map<string, PendingThumbnail>();
+
     // Cached from the last listVersions() response, per project id, so
     // canManageVersions() can be answered synchronously.
     private readonly canManageCache = new Map<string, boolean>();
@@ -63,6 +85,7 @@ export class WorkshopProjectStorage extends LegacyStorage {
         const versionTimestamp = (result as {versionTimestamp?: number}).versionTimestamp;
         if (typeof versionTimestamp === 'number') {
             this.lastVersionTimestamp.set(String(result.id), versionTimestamp);
+            this.expectThumbnail(String(result.id), versionTimestamp);
         } else {
             this.lastVersionTimestamp.delete(String(result.id));
         }
@@ -76,11 +99,85 @@ export class WorkshopProjectStorage extends LegacyStorage {
         // no version to attach this thumbnail to, so skip the request.
         if (typeof timestamp === 'undefined') return;
         if (!this.projectHost) return;
-        await fetch(this.withAuth(`${this.projectHost}/${id}/versions/${timestamp}/thumbnail`), {
-            method: 'PUT',
-            credentials: 'include',
-            body: thumbnail
+        try {
+            await this.putThumbnail(id, timestamp, thumbnail);
+        } finally {
+            this.settleThumbnail(id, timestamp);
+        }
+    }
+
+    /*
+     * Resolves once the thumbnails of the versions created by recent saves have
+     * been uploaded (successfully or not), or after timeoutMs. Resolves
+     * immediately when nothing is pending. The workshop save bridge awaits this
+     * before reporting a save as finished to the embedding page.
+     */
+    async waitForPendingThumbnail (timeoutMs = 10000): Promise<void> {
+        if (this.pendingThumbnails.size === 0) return;
+        const pending = Array.from(this.pendingThumbnails.values()).map(entry => entry.promise);
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const timeout = new Promise<void>(resolve => {
+            timer = setTimeout(resolve, timeoutMs);
         });
+        try {
+            await Promise.race([Promise.all(pending), timeout]);
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
+    /*
+     * PUTs the thumbnail, retrying once after a short pause when the request
+     * fails (network error or non-2xx). Failures are logged, never thrown: a
+     * missing thumbnail must not turn a successful save into an error.
+     */
+    private async putThumbnail (id: string, timestamp: number, thumbnail: Blob): Promise<void> {
+        const url = this.withAuth(`${this.projectHost}/${id}/versions/${timestamp}/thumbnail`);
+        for (let attempt = 1; attempt <= 2; attempt++) {
+            try {
+                const res = await fetch(url, {
+                    method: 'PUT',
+                    credentials: 'include',
+                    body: thumbnail
+                });
+                if (res.ok) return;
+                log.warn(`Failed to save thumbnail (attempt ${attempt}): ${res.status}`);
+            } catch (e) {
+                log.warn(`Failed to save thumbnail (attempt ${attempt}):`, e);
+            }
+            if (attempt < 2) {
+                await new Promise(resolve => setTimeout(resolve, THUMBNAIL_RETRY_DELAY_MS));
+            }
+        }
+    }
+
+    // Registers a thumbnail that is expected to be uploaded for this version. It
+    // settles when the upload finishes or, if saveProjectThumbnail is never
+    // called, after THUMBNAIL_START_TIMEOUT_MS.
+    private expectThumbnail (id: string, timestamp: number): void {
+        const key = `${id}/${timestamp}`;
+        this.pendingThumbnails.get(key)?.settle();
+        let settle: () => void = () => {};
+        const promise = new Promise<void>(resolve => {
+            settle = resolve;
+        });
+        const timer = setTimeout(() => this.settleThumbnail(id, timestamp), THUMBNAIL_START_TIMEOUT_MS);
+        const entry: PendingThumbnail = {
+            promise,
+            settle: () => {
+                clearTimeout(timer);
+                settle();
+            }
+        };
+        this.pendingThumbnails.set(key, entry);
+        // Drop the entry once settled, but only if it wasn't replaced meanwhile.
+        promise.then(() => {
+            if (this.pendingThumbnails.get(key) === entry) this.pendingThumbnails.delete(key);
+        });
+    }
+
+    private settleThumbnail (id: string, timestamp: number): void {
+        this.pendingThumbnails.get(`${id}/${timestamp}`)?.settle();
     }
 
     /*
@@ -113,6 +210,7 @@ export class WorkshopProjectStorage extends LegacyStorage {
         // that project-saver-hoc issues right after this PUTs the thumbnail
         // onto this version rather than a stale one.
         this.lastVersionTimestamp.set(String(projectId), versionTimestamp);
+        this.expectThumbnail(String(projectId), versionTimestamp);
         return {id: projectId, timestamp: versionTimestamp};
     }
 

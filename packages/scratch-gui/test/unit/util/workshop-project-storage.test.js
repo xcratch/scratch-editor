@@ -1,4 +1,5 @@
 import {WorkshopProjectStorage} from '../../../src/lib/workshop-project-storage';
+import {LegacyStorage} from '../../../src/lib/legacy-storage';
 
 const jsonResponse = body => ({
     ok: true,
@@ -94,5 +95,176 @@ describe('WorkshopProjectStorage.saveVersionWithMeta', () => {
         const storage = makeStorage();
         await expect(storage.saveVersionWithMeta('42', '{}', {})).rejects.toThrow('Project host not set');
         expect(global.fetch).not.toHaveBeenCalled();
+    });
+});
+
+describe('WorkshopProjectStorage thumbnail upload', () => {
+    const thumbnail = {size: 1}; // stand-in for a Blob
+
+    const makeStorage = () => {
+        const storage = new WorkshopProjectStorage();
+        storage.setProjectHost('https://host');
+        return storage;
+    };
+
+    // Registers a pending thumbnail the way a real save does: saveVersionWithMeta
+    // records the version timestamp returned by the server.
+    const saveVersion = async storage => {
+        global.fetch = jest.fn().mockResolvedValue(
+            jsonResponse({'content-name': 42, 'id': 42, 'versionTimestamp': 777})
+        );
+        await storage.saveVersionWithMeta('42', '{}', {});
+    };
+
+    beforeEach(() => {
+        jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
+    test('waitForPendingThumbnail resolves immediately when nothing is pending', async () => {
+        const storage = makeStorage();
+        await expect(storage.waitForPendingThumbnail()).resolves.toBeUndefined();
+    });
+
+    test('waits until the thumbnail PUT completes', async () => {
+        const storage = makeStorage();
+        await saveVersion(storage);
+
+        let finishPut;
+        global.fetch = jest.fn().mockReturnValue(new Promise(resolve => {
+            finishPut = () => resolve({ok: true});
+        }));
+        const upload = storage.saveProjectThumbnail('42', thumbnail);
+        let waited = false;
+        const waiting = storage.waitForPendingThumbnail().then(() => {
+            waited = true;
+        });
+
+        await Promise.resolve();
+        expect(waited).toBe(false);
+        finishPut();
+        await upload;
+        await waiting;
+        expect(waited).toBe(true);
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+        // nothing left to wait for
+        await expect(storage.waitForPendingThumbnail()).resolves.toBeUndefined();
+    });
+
+    test('also waits when the thumbnail PUT has not been issued yet', async () => {
+        const storage = makeStorage();
+        await saveVersion(storage);
+
+        let waited = false;
+        const waiting = storage.waitForPendingThumbnail().then(() => {
+            waited = true;
+        });
+        await Promise.resolve();
+        expect(waited).toBe(false);
+
+        global.fetch = jest.fn().mockResolvedValue({ok: true});
+        await storage.saveProjectThumbnail('42', thumbnail);
+        await waiting;
+        expect(waited).toBe(true);
+    });
+
+    test('retries once after a failed PUT and settles after the retry', async () => {
+        const storage = makeStorage();
+        await saveVersion(storage);
+
+        global.fetch = jest.fn()
+            .mockResolvedValueOnce({ok: false, status: 500})
+            .mockResolvedValueOnce({ok: true});
+        const upload = storage.saveProjectThumbnail('42', thumbnail);
+        await jest.advanceTimersByTimeAsync(1000);
+        await upload;
+
+        expect(global.fetch).toHaveBeenCalledTimes(2);
+        expect(global.fetch.mock.calls[1][0]).toBe('https://host/42/versions/777/thumbnail');
+        await expect(storage.waitForPendingThumbnail()).resolves.toBeUndefined();
+    });
+
+    test('retries once after a network error and gives up quietly after the second failure', async () => {
+        const storage = makeStorage();
+        await saveVersion(storage);
+
+        global.fetch = jest.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+        const upload = storage.saveProjectThumbnail('42', thumbnail);
+        await jest.advanceTimersByTimeAsync(1000);
+        await expect(upload).resolves.toBeUndefined();
+
+        expect(global.fetch).toHaveBeenCalledTimes(2);
+        await expect(storage.waitForPendingThumbnail()).resolves.toBeUndefined();
+    });
+
+    test('waitForPendingThumbnail gives up after its own timeout', async () => {
+        const storage = makeStorage();
+        await saveVersion(storage);
+
+        global.fetch = jest.fn().mockReturnValue(new Promise(() => {})); // never completes
+        storage.saveProjectThumbnail('42', thumbnail);
+        let waited = false;
+        const waiting = storage.waitForPendingThumbnail(2000).then(() => {
+            waited = true;
+        });
+        await jest.advanceTimersByTimeAsync(1999);
+        expect(waited).toBe(false);
+        await jest.advanceTimersByTimeAsync(2);
+        await waiting;
+        expect(waited).toBe(true);
+    });
+
+    test('stops waiting when saveProjectThumbnail is never called', async () => {
+        const storage = makeStorage();
+        await saveVersion(storage);
+
+        let waited = false;
+        const waiting = storage.waitForPendingThumbnail(60000).then(() => {
+            waited = true;
+        });
+        await jest.advanceTimersByTimeAsync(4999);
+        expect(waited).toBe(false);
+        await jest.advanceTimersByTimeAsync(2);
+        await waiting;
+        expect(waited).toBe(true);
+    });
+
+    describe('saveProject', () => {
+        const params = {originalId: '', isCopy: false, isRemix: false, title: 't'};
+        let spy;
+        afterEach(() => spy.mockRestore());
+
+        test('with a versionTimestamp it registers a pending thumbnail', async () => {
+            spy = jest.spyOn(LegacyStorage.prototype, 'saveProject')
+                .mockResolvedValue({id: 42, versionTimestamp: 900});
+            const storage = makeStorage();
+            await storage.saveProject(42, '{}', params);
+
+            let waited = false;
+            const waiting = storage.waitForPendingThumbnail().then(() => {
+                waited = true;
+            });
+            await Promise.resolve();
+            expect(waited).toBe(false);
+
+            global.fetch = jest.fn().mockResolvedValue({ok: true});
+            await storage.saveProjectThumbnail('42', thumbnail);
+            await waiting;
+            expect(global.fetch.mock.calls[0][0]).toBe('https://host/42/versions/900/thumbnail');
+        });
+
+        test('without a versionTimestamp nothing is pending and no thumbnail is sent', async () => {
+            spy = jest.spyOn(LegacyStorage.prototype, 'saveProject').mockResolvedValue({id: 42});
+            const storage = makeStorage();
+            await storage.saveProject(42, '{}', params);
+            await expect(storage.waitForPendingThumbnail()).resolves.toBeUndefined();
+
+            global.fetch = jest.fn();
+            await storage.saveProjectThumbnail('42', thumbnail);
+            expect(global.fetch).not.toHaveBeenCalled();
+        });
     });
 });
