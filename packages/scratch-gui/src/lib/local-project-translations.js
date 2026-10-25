@@ -33,6 +33,19 @@ const localProjectTranslations = {
         'xcratch.projectHistory.deleteVersionConfirm': 'この履歴を削除しますか?この操作は元に戻せません。',
         'xcratch.projectHistory.lock': '削除されないようにこの版をロックする',
         'xcratch.projectHistory.unlock': 'この版のロックを解除する',
+        'xcratch.projectLibrary.searchPlaceholder': '名前やコメントで検索',
+        'xcratch.projectLibrary.sortLabel': '並び順',
+        'xcratch.projectLibrary.sortModified': '更新日',
+        'xcratch.projectLibrary.sortCreated': '作成日',
+        'xcratch.projectLibrary.sortName': '名前',
+        'xcratch.projectLibrary.sortSize': 'サイズ',
+        'xcratch.projectLibrary.usage': '使用量 {used}',
+        'xcratch.projectLibrary.usageWithQuota': '使用量 {used}(ブラウザーの上限 {quota})',
+        'xcratch.projectLibrary.projectSize': '{size} · 履歴 {count} 件',
+        'xcratch.projectLibrary.noMatch': '検索に一致するプロジェクトはありません。',
+        'xcratch.projectHistory.prune': '履歴を整理',
+        'xcratch.projectHistory.pruneConfirm': '{count} 件の履歴を削除しますか?最新の版と、ロックした版・コメント付きの版は残ります。この操作は元に戻せません。',
+        'xcratch.projectHistory.pruneNothing': '削除できる履歴はありません。',
         'xcratch.projectConflict.confirm': 'このプロジェクトは別のタブで更新されています。\n' +
             'OK: このタブの内容で上書き保存する\n' +
             'キャンセル: このタブの変更を破棄して、最新の保存内容を読み込む'
@@ -69,6 +82,20 @@ const localProjectTranslations = {
         'xcratch.projectHistory.deleteVersionConfirm': 'このりれきをさくじょしますか?このそうさはもとにもどせません。',
         'xcratch.projectHistory.lock': 'さくじょされないようにこのばんをロックする',
         'xcratch.projectHistory.unlock': 'このばんのロックをかいじょする',
+        'xcratch.projectLibrary.searchPlaceholder': 'なまえやコメントでさがす',
+        'xcratch.projectLibrary.sortLabel': 'ならびじゅん',
+        'xcratch.projectLibrary.sortModified': 'こうしんび',
+        'xcratch.projectLibrary.sortCreated': 'つくったひ',
+        'xcratch.projectLibrary.sortName': 'なまえ',
+        'xcratch.projectLibrary.sortSize': 'サイズ',
+        'xcratch.projectLibrary.usage': 'つかっているりょう {used}',
+        'xcratch.projectLibrary.usageWithQuota': 'つかっているりょう {used}(ブラウザーのじょうげん {quota})',
+        'xcratch.projectLibrary.projectSize': '{size} · りれき {count} けん',
+        'xcratch.projectLibrary.noMatch': 'みつかったプロジェクトはありません。',
+        'xcratch.projectHistory.prune': 'りれきをせいりする',
+        'xcratch.projectHistory.pruneConfirm': '{count} けんのりれきをさくじょしますか?' +
+            'さいしんのばんと、ロックしたばん・コメントつきのばんはのこります。このそうさはもとにもどせません。',
+        'xcratch.projectHistory.pruneNothing': 'さくじょできるりれきはありません。',
         'xcratch.projectConflict.confirm': 'このプロジェクトはべつのタブでこうしんされています。\n' +
             'OK: このタブのないようでうわがきほぞんする\n' +
             'キャンセル: このタブのへんこうをすてて、さいしんのほぞんないようをよみこむ'

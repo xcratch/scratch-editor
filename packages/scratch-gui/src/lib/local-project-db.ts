@@ -153,6 +153,26 @@ export const putAsset = (asset: StoredAsset): Promise<IDBValidKey> =>
 export const listAssetKeys = (): Promise<string[]> =>
     withStore(ASSETS_STORE, 'readonly', store => store.getAllKeys()) as Promise<string[]>;
 
+/*
+ * Byte size of every stored asset, keyed by md5ext. Walks a cursor so the
+ * sizes are read one record at a time instead of materializing all blobs.
+ */
+export const listAssetSizes = async (): Promise<Map<string, number>> => {
+    const db = await openDB();
+    const tx = db.transaction(ASSETS_STORE, 'readonly');
+    const sizes = new Map<string, number>();
+    const request = tx.objectStore(ASSETS_STORE).openCursor();
+    request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) return;
+        const {md5ext, data} = cursor.value as StoredAsset;
+        sizes.set(md5ext, typeof data === 'string' ? data.length : data.byteLength);
+        cursor.continue();
+    };
+    await promisifyTransaction(tx);
+    return sizes;
+};
+
 export const deleteAssets = async (md5exts: string[]): Promise<void> => {
     if (md5exts.length === 0) return;
     const db = await openDB();

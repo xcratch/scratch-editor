@@ -4,6 +4,8 @@ import PropTypes from 'prop-types';
 import React from 'react';
 import {FormattedMessage, FormattedDate, FormattedTime} from 'react-intl';
 
+import {formatBytes} from '../../lib/project-list-filter.js';
+
 import styles from './project-library.css';
 
 class ProjectItem extends React.Component {
@@ -50,7 +52,7 @@ class ProjectItem extends React.Component {
         e.stopPropagation();
     }
     render () {
-        const {isCurrent, project} = this.props;
+        const {isCurrent, project, usage} = this.props;
         return (
             <div
                 className={classNames(styles.projectItem, {
@@ -91,6 +93,16 @@ class ProjectItem extends React.Component {
                     {' '}
                     <FormattedTime value={project.modified} />
                 </div>
+                {usage && (
+                    <div className={styles.projectSize}>
+                        <FormattedMessage
+                            defaultMessage="{size} · {count, plural, one {# version} other {# versions}}"
+                            description="Size of a browser-stored project and its number of saved versions"
+                            id="xcratch.projectLibrary.projectSize"
+                            values={{size: formatBytes(usage.bytes), count: usage.versionCount}}
+                        />
+                    </div>
+                )}
                 <textarea
                     className={styles.commentInput}
                     defaultValue={project.comment || ''}
@@ -153,7 +165,11 @@ ProjectItem.propTypes = {
         thumbnailUrl: PropTypes.string,
         modified: PropTypes.number,
         comment: PropTypes.string
-    }).isRequired
+    }).isRequired,
+    usage: PropTypes.shape({
+        bytes: PropTypes.number,
+        versionCount: PropTypes.number
+    })
 };
 
 export default ProjectItem;

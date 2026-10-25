@@ -4,6 +4,18 @@ import {ScratchStorage} from 'scratch-storage';
 export type GUIConfigFactory = () => GUIConfig;
 export type ProjectId = string | number;
 
+/*
+ * Space taken by browser-stored projects. Per-project bytes count only what
+ * deleting that project would free: assets shared with another project are
+ * excluded there but included in totalBytes.
+ */
+export interface StorageUsage {
+    projects: Record<string, {bytes: number; versionCount: number}>;
+    totalBytes: number;
+    // Origin-wide figures from navigator.storage.estimate(), when available
+    quota?: {usage: number; quota: number};
+}
+
 export interface GUIConfig {
     storage: GUIStorage;
 }
@@ -31,6 +43,13 @@ export interface GUIStorage {
     ): Promise<{ id: ProjectId }>;
 
     saveProjectThumbnail?(projectId: ProjectId, thumbnail: Blob): void;
+
+    // Browser storage housekeeping (optional; callers must feature-detect
+    // with `typeof storage.xxx === 'function'`).
+    // Delete every version except the newest, kept and commented ones.
+    // Resolves with the number of versions deleted.
+    pruneVersions?(id: ProjectId): Promise<number>;
+    getStorageUsage?(): Promise<StorageUsage>;
 
     // Force-saves a new version with a comment and keep flag set at creation
     // time (e.g. from an extension block via runtime.saveProjectVersion).
@@ -69,6 +88,9 @@ export const GUIStoragePropType = PropTypes.shape({
     saveProject: PropTypes.func.isRequired,
 
     saveProjectThumbnail: PropTypes.func,
+
+    pruneVersions: PropTypes.func,
+    getStorageUsage: PropTypes.func,
 
     saveVersionWithMeta: PropTypes.func
 });
