@@ -24,6 +24,18 @@ export interface ProjectVersionItem {
     isKeep?: boolean;
 }
 
+/*
+ * Space taken by browser-stored projects. Per-project bytes count only what
+ * deleting that project would free: assets shared with another project are
+ * excluded there but included in totalBytes.
+ */
+export interface StorageUsage {
+    projects: Record<string, {bytes: number; versionCount: number}>;
+    totalBytes: number;
+    // Origin-wide figures from navigator.storage.estimate(), when available
+    quota?: {usage: number; quota: number};
+}
+
 export interface GUIConfig {
     storage: GUIStorage;
 }
@@ -65,6 +77,10 @@ export interface GUIStorage {
     setVersionComment?(id: ProjectId, timestamp: number, comment: string): Promise<void>;
     setVersionKeep?(id: ProjectId, timestamp: number, isKeep: boolean): Promise<void>;
     deleteVersion?(id: ProjectId, timestamp: number): Promise<void>;
+    // Delete every version except the newest, kept and commented ones.
+    // Resolves with the number of versions deleted.
+    pruneVersions?(id: ProjectId): Promise<number>;
+    getStorageUsage?(): Promise<StorageUsage>;
     canManageVersions?(id: ProjectId): boolean;
     getVersionPlayerUrl?(id: ProjectId, timestamp: number): string;
     getVersionEditorUrl?(id: ProjectId, timestamp: number): string;
@@ -114,6 +130,8 @@ export const GUIStoragePropType = PropTypes.shape({
     setVersionComment: PropTypes.func,
     setVersionKeep: PropTypes.func,
     deleteVersion: PropTypes.func,
+    pruneVersions: PropTypes.func,
+    getStorageUsage: PropTypes.func,
     canManageVersions: PropTypes.func,
     getVersionPlayerUrl: PropTypes.func,
     getVersionEditorUrl: PropTypes.func,

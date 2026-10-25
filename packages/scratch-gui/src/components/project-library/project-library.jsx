@@ -1,3 +1,4 @@
+import classNames from 'classnames';
 import PropTypes from 'prop-types';
 import React from 'react';
 import {defineMessages, injectIntl, FormattedMessage} from 'react-intl';
@@ -8,6 +9,7 @@ import Spinner from '../spinner/spinner.jsx';
 import ProjectItem from './project-item.jsx';
 import VersionRow from './version-row.jsx';
 import {computeGraphLayout} from '../../lib/git-graph.js';
+import {SORT_ORDERS, filterAndSortProjects, formatBytes} from '../../lib/project-list-filter.js';
 
 import styles from './project-library.css';
 
@@ -21,13 +23,51 @@ const messages = defineMessages({
         id: 'xcratch.projectLibrary.commentPlaceholder',
         defaultMessage: 'Write a comment…',
         description: 'Placeholder of the per-project comment field in the project list'
+    },
+    searchPlaceholder: {
+        id: 'xcratch.projectLibrary.searchPlaceholder',
+        defaultMessage: 'Search by name or comment',
+        description: 'Placeholder of the search field in the project list'
+    },
+    sortLabel: {
+        id: 'xcratch.projectLibrary.sortLabel',
+        defaultMessage: 'Sort by',
+        description: 'Accessible label of the sort order selector in the project list'
+    },
+    sortModified: {
+        id: 'xcratch.projectLibrary.sortModified',
+        defaultMessage: 'Last modified',
+        description: 'Sort option: most recently modified first'
+    },
+    sortCreated: {
+        id: 'xcratch.projectLibrary.sortCreated',
+        defaultMessage: 'Date created',
+        description: 'Sort option: most recently created first'
+    },
+    sortName: {
+        id: 'xcratch.projectLibrary.sortName',
+        defaultMessage: 'Name',
+        description: 'Sort option: alphabetical by project name'
+    },
+    sortSize: {
+        id: 'xcratch.projectLibrary.sortSize',
+        defaultMessage: 'Size',
+        description: 'Sort option: largest projects first'
     }
 });
+
+const sortMessages = {
+    modified: messages.sortModified,
+    created: messages.sortCreated,
+    name: messages.sortName,
+    size: messages.sortSize
+};
 
 const ProjectLibraryComponent = props => {
     const {
         canManageVersions,
         canPlayVersion,
+        canPruneVersions,
         canSeeInsideVersion,
         confirmRestoreTimestamp,
         currentProjectId,
@@ -43,6 +83,8 @@ const ProjectLibraryComponent = props => {
         onDeleteVersion,
         onOpenProject,
         onPlayVersion,
+        onPruneVersions,
+        onSearchChange,
         onSeeInsideVersion,
         onRequestClose,
         onRestoreVersion,
@@ -50,12 +92,66 @@ const ProjectLibraryComponent = props => {
         onSetVersionComment,
         onSetVersionKeep,
         onShowHistory,
+        onSortChange,
         projects,
+        searchQuery,
+        sortOrder,
+        usage,
         versions,
         view
     } = props;
 
-    const renderList = () => (
+    const renderToolbar = () => (
+        <div className={styles.listToolbar}>
+            <input
+                className={styles.searchInput}
+                placeholder={intl.formatMessage(messages.searchPlaceholder)}
+                type="search"
+                value={searchQuery}
+                onChange={onSearchChange}
+            />
+            <select
+                aria-label={intl.formatMessage(messages.sortLabel)}
+                className={styles.sortSelect}
+                value={sortOrder}
+                onChange={onSortChange}
+            >
+                {SORT_ORDERS.map(order => (
+                    <option
+                        disabled={order === 'size' && !usage}
+                        key={order}
+                        value={order}
+                    >
+                        {intl.formatMessage(sortMessages[order])}
+                    </option>
+                ))}
+            </select>
+            {usage && (
+                <span className={styles.usageSummary}>
+                    {usage.quota ? (
+                        <FormattedMessage
+                            defaultMessage="{used} used (browser quota {quota})"
+                            description="Total size of projects saved in the browser, with the browser storage quota"
+                            id="xcratch.projectLibrary.usageWithQuota"
+                            values={{
+                                used: formatBytes(usage.totalBytes),
+                                quota: formatBytes(usage.quota.quota)
+                            }}
+                        />
+                    ) : (
+                        <FormattedMessage
+                            defaultMessage="{used} used"
+                            description="Total size of projects saved in the browser"
+                            id="xcratch.projectLibrary.usage"
+                            values={{used: formatBytes(usage.totalBytes)}}
+                        />
+                    )}
+                </span>
+            )}
+        </div>
+    );
+
+    const renderGrid = visibleProjects => (
         <div className={styles.scrollGrid}>
             {loading ? (
                 <div className={styles.spinnerWrapper}>
@@ -72,21 +168,40 @@ const ProjectLibraryComponent = props => {
                         id="xcratch.projectLibrary.empty"
                     />
                 </div>
-            ) : projects.map(project => (
+            ) : (visibleProjects.length === 0 ? (
+                <div className={styles.emptyMessage}>
+                    <FormattedMessage
+                        defaultMessage="No projects match your search."
+                        description="Message shown when no project in the browser list matches the search"
+                        id="xcratch.projectLibrary.noMatch"
+                    />
+                </div>
+            ) : visibleProjects.map(project => (
                 <ProjectItem
                     commentPlaceholder={intl.formatMessage(messages.commentPlaceholder)}
                     isCurrent={String(project.id) === String(currentProjectId)}
                     key={project.id}
                     project={project}
+                    usage={usage ? usage.projects[project.id] : null}
                     onCopy={onCopyProject}
                     onDelete={onDeleteProject}
                     onOpen={onOpenProject}
                     onSetComment={onSetComment}
                     onShowHistory={onShowHistory}
                 />
-            )))}
+            ))))}
         </div>
     );
+
+    const renderList = () => {
+        const visibleProjects = filterAndSortProjects(projects, {query: searchQuery, sortOrder, usage});
+        return (
+            <div className={styles.listContainer}>
+                {renderToolbar()}
+                {renderGrid(visibleProjects)}
+            </div>
+        );
+    };
 
     const renderHistory = () => {
         const graphData = computeGraphLayout(versions);
@@ -124,6 +239,18 @@ const ProjectLibraryComponent = props => {
                             values={{projectName: historyProjectName}}
                         />
                     </span>
+                    {canPruneVersions && canManageVersions && versions.length > 1 && (
+                        <button
+                            className={classNames(styles.itemButton, styles.pruneButton)}
+                            onClick={onPruneVersions}
+                        >
+                            <FormattedMessage
+                                defaultMessage="Clean up history"
+                                description="Button to delete every version except the latest, kept and commented ones" // eslint-disable-line max-len
+                                id="xcratch.projectHistory.prune"
+                            />
+                        </button>
+                    )}
                 </div>
                 <div className={styles.versionList}>
                     {versions.length === 0 ? (
@@ -227,6 +354,7 @@ const ProjectLibraryComponent = props => {
 ProjectLibraryComponent.propTypes = {
     canManageVersions: PropTypes.bool,
     canPlayVersion: PropTypes.bool,
+    canPruneVersions: PropTypes.bool,
     canSeeInsideVersion: PropTypes.bool,
     confirmRestoreTimestamp: PropTypes.number,
     currentProjectId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
@@ -242,6 +370,8 @@ ProjectLibraryComponent.propTypes = {
     onDeleteVersion: PropTypes.func.isRequired,
     onOpenProject: PropTypes.func.isRequired,
     onPlayVersion: PropTypes.func,
+    onPruneVersions: PropTypes.func,
+    onSearchChange: PropTypes.func.isRequired,
     onSeeInsideVersion: PropTypes.func,
     onRequestClose: PropTypes.func.isRequired,
     onRestoreVersion: PropTypes.func.isRequired,
@@ -249,13 +379,28 @@ ProjectLibraryComponent.propTypes = {
     onSetVersionComment: PropTypes.func.isRequired,
     onSetVersionKeep: PropTypes.func.isRequired,
     onShowHistory: PropTypes.func.isRequired,
+    onSortChange: PropTypes.func.isRequired,
     projects: PropTypes.arrayOf(PropTypes.shape({
         id: PropTypes.string.isRequired,
         name: PropTypes.string,
         thumbnailUrl: PropTypes.string,
+        created: PropTypes.number,
         modified: PropTypes.number,
         comment: PropTypes.string
     })).isRequired,
+    searchQuery: PropTypes.string,
+    sortOrder: PropTypes.oneOf(SORT_ORDERS),
+    usage: PropTypes.shape({
+        projects: PropTypes.objectOf(PropTypes.shape({
+            bytes: PropTypes.number,
+            versionCount: PropTypes.number
+        })),
+        totalBytes: PropTypes.number,
+        quota: PropTypes.shape({
+            usage: PropTypes.number,
+            quota: PropTypes.number
+        })
+    }),
     versions: PropTypes.arrayOf(PropTypes.shape({
         comment: PropTypes.string,
         thumbnailUrl: PropTypes.string,
@@ -268,8 +413,12 @@ ProjectLibraryComponent.propTypes = {
 ProjectLibraryComponent.defaultProps = {
     canManageVersions: true,
     canPlayVersion: false,
+    canPruneVersions: false,
     canSeeInsideVersion: false,
-    listAvailable: true
+    listAvailable: true,
+    searchQuery: '',
+    sortOrder: 'modified',
+    usage: null
 };
 
 export default injectIntl(ProjectLibraryComponent);

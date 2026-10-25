@@ -17,6 +17,7 @@ jest.mock('../../../src/lib/local-project-db', () => ({
     getAsset: jest.fn(),
     putAsset: jest.fn(),
     listAssetKeys: jest.fn(),
+    listAssetSizes: jest.fn(),
     deleteAssets: jest.fn(),
     putVersion: jest.fn(),
     getVersion: jest.fn(),
@@ -516,5 +517,93 @@ describe('LocalProjectStorage multi-tab conflict detection', () => {
         const lastWritten = db.putHeader.mock.calls[db.putHeader.mock.calls.length - 1][0].modified;
         db.getHeader.mockResolvedValue({id, name: 'P', thumbnail: null, created: 1, modified: lastWritten});
         expect(await storage.hasConflict(id)).toBe(false);
+    });
+});
+
+const bodyWithAssets = (...md5exts) => JSON.stringify({
+    targets: [{costumes: md5exts.map(md5ext => ({md5ext})), sounds: []}]
+});
+
+describe('LocalProjectStorage.pruneVersions', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        db.putVersion.mockResolvedValue('ok');
+        db.deleteVersions.mockResolvedValue(null);
+        db.getAllBodies.mockResolvedValue([]);
+        db.getAllVersionBodies.mockResolvedValue([]);
+        db.listAssetKeys.mockResolvedValue([]);
+        db.deleteAssets.mockResolvedValue(null);
+    });
+
+    test('keeps the newest, kept and commented versions and deletes the rest', async () => {
+        // newest first: 50 <- 40 (kept) <- 30 <- 20 (commented) <- 10
+        db.listVersions.mockResolvedValue([
+            {projectId: '1', timestamp: 50, parentTimestamp: 40, body: '{"v":5}'},
+            {projectId: '1', timestamp: 40, parentTimestamp: 30, body: '{"v":4}', isKeep: true},
+            {projectId: '1', timestamp: 30, parentTimestamp: 20, body: '{"v":3}'},
+            {projectId: '1', timestamp: 20, parentTimestamp: 10, body: '{"v":2}', comment: 'note'},
+            {projectId: '1', timestamp: 10, parentTimestamp: null, body: '{"v":1}'}
+        ]);
+        const storage = new LocalProjectStorage();
+        const deleted = await storage.pruneVersions('1');
+
+        expect(deleted).toBe(2);
+        expect(db.deleteVersions).toHaveBeenCalledWith([['1', 30], ['1', 10]]);
+        // 40's parent (30) is gone: it is reparented onto 20 with a fresh diff
+        expect(db.putVersion).toHaveBeenCalledTimes(2);
+        expect(db.putVersion).toHaveBeenCalledWith(expect.objectContaining({
+            timestamp: 40, parentTimestamp: 20, diff: expect.anything()
+        }));
+        expect(db.putVersion).toHaveBeenCalledWith(expect.objectContaining({
+            timestamp: 20, parentTimestamp: null
+        }));
+        // Orphaned assets are swept right away
+        expect(db.listAssetKeys).toHaveBeenCalled();
+    });
+
+    test('does nothing when every older version is kept or commented', async () => {
+        db.listVersions.mockResolvedValue([
+            {projectId: '1', timestamp: 20, parentTimestamp: 10, body: '{}'},
+            {projectId: '1', timestamp: 10, parentTimestamp: null, body: '{}', isKeep: true}
+        ]);
+        const storage = new LocalProjectStorage();
+        expect(await storage.pruneVersions('1')).toBe(0);
+        expect(db.deleteVersions).not.toHaveBeenCalled();
+        expect(db.listAssetKeys).not.toHaveBeenCalled();
+    });
+});
+
+describe('LocalProjectStorage.getStorageUsage', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    test('counts shared assets only in the total', async () => {
+        const bodyA = bodyWithAssets('shared.png', 'onlyA.png');
+        const bodyB = bodyWithAssets('shared.png');
+        const oldA = bodyWithAssets('oldA.wav');
+        db.listHeaders.mockResolvedValue([
+            {id: 'A', name: 'A', thumbnail: {size: 7}, created: 1, modified: 2},
+            {id: 'B', name: 'B', thumbnail: null, created: 1, modified: 2}
+        ]);
+        db.getAllBodies.mockResolvedValue([{id: 'A', body: bodyA}, {id: 'B', body: bodyB}]);
+        db.getAllVersionBodies.mockResolvedValue([
+            {projectId: 'A', timestamp: 2, body: bodyA, thumbnail: {size: 3}},
+            {projectId: 'A', timestamp: 1, body: oldA},
+            {projectId: 'B', timestamp: 2, body: bodyB}
+        ]);
+        db.listAssetSizes.mockResolvedValue(new Map([
+            ['shared.png', 1000], ['onlyA.png', 200], ['oldA.wav', 30], ['orphan.png', 4]
+        ]));
+
+        const usage = await new LocalProjectStorage().getStorageUsage();
+
+        expect(usage.projects.A).toEqual({
+            bytes: 7 + bodyA.length + bodyA.length + 3 + oldA.length + 200 + 30,
+            versionCount: 2
+        });
+        expect(usage.projects.B).toEqual({bytes: bodyB.length * 2, versionCount: 1});
+        expect(usage.totalBytes).toBe(
+            usage.projects.A.bytes - 230 + usage.projects.B.bytes + 1000 + 200 + 30 + 4);
     });
 });

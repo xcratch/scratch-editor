@@ -43,6 +43,16 @@ const messages = defineMessages({
         defaultMessage: 'Restore this version? The current state is saved to the history first.',
         description: 'Confirmation shown before restoring a project version'
     },
+    pruneConfirm: {
+        id: 'xcratch.projectHistory.pruneConfirm',
+        defaultMessage: 'Delete {count} versions? The latest version and versions that are kept or have a comment are not deleted. This cannot be undone.', // eslint-disable-line max-len
+        description: 'Confirmation shown before deleting all removable versions of a project'
+    },
+    pruneNothing: {
+        id: 'xcratch.projectHistory.pruneNothing',
+        defaultMessage: 'There are no versions to delete.',
+        description: 'Message shown when cleaning up history finds nothing to delete'
+    },
     deleteVersionConfirm: {
         id: 'xcratch.projectHistory.deleteVersionConfirm',
         defaultMessage: 'Are you sure you want to delete this version? This cannot be undone.',
@@ -67,7 +77,10 @@ class ProjectLibrary extends React.Component {
             'handleShowHistory',
             'handleConfirmRestore',
             'handleCancelRestore',
-            'handleDeleteVersion'
+            'handleDeleteVersion',
+            'handlePruneVersions',
+            'handleSearchChange',
+            'handleSortChange'
         ]);
         this.state = {
             loading: true,
@@ -83,7 +96,12 @@ class ProjectLibrary extends React.Component {
             // its existing behavior; set from listVersions()'s canManage flag
             // for storages that support it (WorkshopProjectStorage).
             canManage: true,
-            confirmRestoreTimestamp: null
+            confirmRestoreTimestamp: null,
+            searchQuery: '',
+            sortOrder: 'modified',
+            // Result of storage.getStorageUsage(); null until measured or when
+            // the storage cannot measure (workshop mode)
+            usage: null
         };
         this.objectUrls = [];
         this.versionObjectUrls = [];
@@ -132,16 +150,31 @@ class ProjectLibrary extends React.Component {
                         id: header.id,
                         name: header.name,
                         thumbnailUrl,
+                        created: header.created,
                         modified: header.modified,
                         comment: header.comment || ''
                     };
                 });
                 this.setState({loading: false, projects});
+                this.loadUsage();
             })
             .catch(err => {
                 log.error(err);
                 this.setState({loading: false, projects: []});
             });
+    }
+    loadUsage () {
+        if (typeof this.props.storage.getStorageUsage !== 'function') return;
+        // Measuring reads every stored body, so it runs after the list is shown
+        return this.props.storage.getStorageUsage()
+            .then(usage => this.setState({usage}))
+            .catch(err => log.error(err));
+    }
+    handleSearchChange (e) {
+        this.setState({searchQuery: e.target.value});
+    }
+    handleSortChange (e) {
+        this.setState({sortOrder: e.target.value});
     }
     handleOpenProject (id) {
         if (String(id) === String(this.props.reduxProjectId)) {
@@ -191,26 +224,29 @@ class ProjectLibrary extends React.Component {
             .then(() => this.loadProjects())
             .catch(err => log.error(err));
     }
+    toVersionItems (versions) {
+        return versions.map(version => {
+            let thumbnailUrl = null;
+            if (version.thumbnail) {
+                thumbnailUrl = URL.createObjectURL(version.thumbnail);
+                this.versionObjectUrls.push(thumbnailUrl);
+            }
+            return {
+                timestamp: version.timestamp,
+                parentTimestamp: version.parentTimestamp,
+                thumbnailUrl,
+                comment: version.comment || '',
+                diff: version.diff,
+                isKeep: version.isKeep || false
+            };
+        });
+    }
     handleShowHistory (id) {
         if (typeof this.props.storage.listVersions !== 'function') return;
         this.props.storage.listVersions(id)
             .then(versions => {
                 this.revokeVersionObjectUrls();
-                const versionItems = versions.map(version => {
-                    let thumbnailUrl = null;
-                    if (version.thumbnail) {
-                        thumbnailUrl = URL.createObjectURL(version.thumbnail);
-                        this.versionObjectUrls.push(thumbnailUrl);
-                    }
-                    return {
-                        timestamp: version.timestamp,
-                        parentTimestamp: version.parentTimestamp,
-                        thumbnailUrl,
-                        comment: version.comment || '',
-                        diff: version.diff,
-                        isKeep: version.isKeep || false
-                    };
-                });
+                const versionItems = this.toVersionItems(versions);
                 // LocalProjectStorage has no canManageVersions method: the author
                 // always has full control there, so default to true.
                 const canManage = typeof this.props.storage.canManageVersions === 'function' ?
@@ -317,22 +353,32 @@ class ProjectLibrary extends React.Component {
                 return this.props.storage.listVersions(id);
             })
             .then(versions => {
-                const versionItems = versions.map(version => {
-                    let thumbnailUrl = null;
-                    if (version.thumbnail) {
-                        thumbnailUrl = URL.createObjectURL(version.thumbnail);
-                        this.versionObjectUrls.push(thumbnailUrl);
-                    }
-                    return {
-                        timestamp: version.timestamp,
-                        parentTimestamp: version.parentTimestamp,
-                        thumbnailUrl,
-                        comment: version.comment || '',
-                        diff: version.diff,
-                        isKeep: version.isKeep || false
-                    };
-                });
+                const versionItems = this.toVersionItems(versions);
                 this.setState({versions: versionItems});
+                this.loadUsage();
+            })
+            .catch(err => log.error(err));
+    }
+    handlePruneVersions () {
+        const id = this.state.historyProjectId;
+        if (!id || typeof this.props.storage.pruneVersions !== 'function') return;
+        // Mirrors the selection in LocalProjectStorage.pruneVersions
+        const removable = this.state.versions.slice(1)
+            .filter(version => !version.isKeep && !version.comment).length;
+        if (removable === 0) {
+            // eslint-disable-next-line no-alert
+            alert(this.props.intl.formatMessage(messages.pruneNothing));
+            return;
+        }
+        // eslint-disable-next-line no-alert
+        const readyToPrune = confirm(this.props.intl.formatMessage(messages.pruneConfirm, {count: removable}));
+        if (!readyToPrune) return;
+        this.props.storage.pruneVersions(id)
+            .then(() => this.props.storage.listVersions(id))
+            .then(versions => {
+                this.revokeVersionObjectUrls();
+                this.setState({versions: this.toVersionItems(versions)});
+                this.loadUsage();
             })
             .catch(err => log.error(err));
     }
@@ -348,6 +394,7 @@ class ProjectLibrary extends React.Component {
             <ProjectLibraryComponent
                 canManageVersions={this.state.canManage}
                 canPlayVersion={typeof storage.getVersionPlayerUrl === 'function'}
+                canPruneVersions={typeof storage.pruneVersions === 'function'}
                 canSeeInsideVersion={typeof storage.getVersionEditorUrl === 'function'}
                 confirmRestoreTimestamp={this.state.confirmRestoreTimestamp}
                 currentProjectId={this.props.reduxProjectId}
@@ -355,6 +402,9 @@ class ProjectLibrary extends React.Component {
                 listAvailable={typeof storage.listProjects === 'function'}
                 loading={this.state.loading}
                 projects={this.state.projects}
+                searchQuery={this.state.searchQuery}
+                sortOrder={this.state.sortOrder}
+                usage={this.state.usage}
                 versions={this.state.versions}
                 view={this.state.view}
                 onBackToList={this.handleBackToList}
@@ -364,6 +414,8 @@ class ProjectLibrary extends React.Component {
                 onDeleteProject={this.handleDeleteProject}
                 onDeleteVersion={this.handleDeleteVersion}
                 onOpenProject={this.handleOpenProject}
+                onPruneVersions={this.handlePruneVersions}
+                onSearchChange={this.handleSearchChange}
                 onPlayVersion={this.handlePlayVersion}
                 onSeeInsideVersion={this.handleSeeInsideVersion}
                 onSetComment={this.handleSetComment}
@@ -372,6 +424,7 @@ class ProjectLibrary extends React.Component {
                 onSetVersionComment={this.handleSetVersionComment}
                 onSetVersionKeep={this.handleSetVersionKeep}
                 onShowHistory={this.handleShowHistory}
+                onSortChange={this.handleSortChange}
             />
         );
     }

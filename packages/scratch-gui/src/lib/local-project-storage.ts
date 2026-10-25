@@ -1,7 +1,7 @@
 import {ScratchStorage, Asset, AssetType, DataFormat, Helper} from 'scratch-storage';
 
 import defaultProject from './default-project';
-import {GUIStorage, ProjectId, ProjectVersionItem, TranslatorFunction} from '../gui-config';
+import {GUIStorage, ProjectId, ProjectVersionItem, StorageUsage, TranslatorFunction} from '../gui-config';
 
 import * as db from './local-project-db';
 import {computeVersionDiff} from './project-diff';
@@ -587,37 +587,128 @@ export class LocalProjectStorage implements GUIStorage {
             throw new Error(`Cannot delete version ${idString}@${timestamp} because it is kept`);
         }
 
-        const toDeleteSet = new Set([timestamp]);
+        await this.reparentSurvivors(versions, new Set([timestamp]), true);
+        await db.deleteVersions([[idString, timestamp]]);
+    }
 
-        const parentMap = new Map<number, number | null>();
-        for (const v of versions) {
-            parentMap.set(v.timestamp, v.parentTimestamp || null);
+    /*
+     * Bulk history cleanup: delete every version except the newest one and
+     * those the user marked as kept or commented. Unlike automatic thinning,
+     * branch parents are not spared - the user asked for this explicitly.
+     * Resolves with the number of versions deleted.
+     */
+    async pruneVersions (id: ProjectId): Promise<number> {
+        const idString = String(id);
+        return this.enqueueWrite(idString, async () => {
+            const versions = await db.listVersions(idString); // newest first
+            const toDelete = versions.slice(1)
+                .filter(v => !v.isKeep && !v.comment)
+                .map(v => v.timestamp);
+            if (toDelete.length === 0) return 0;
+            const toDeleteSet = new Set(toDelete);
+            await this.reparentSurvivors(versions, toDeleteSet, true);
+            await db.deleteVersions(toDelete.map(ts => [idString, ts] as [string, number]));
+            // A later thumbnail must not be patched onto a deleted version
+            const lastTs = this.lastVersionTimestamp.get(idString);
+            if (typeof lastTs !== 'undefined' && toDeleteSet.has(lastTs)) {
+                this.lastVersionTimestamp.delete(idString);
+            }
+            await this.gcOrphanAssets();
+            return toDelete.length;
+        });
+    }
+
+    /*
+     * Measure stored data per project. A project's bytes are what deleting
+     * it would free: its body, versions, thumbnails and the assets no other
+     * project references. String lengths are used as a byte approximation.
+     */
+    async getStorageUsage (): Promise<StorageUsage> {
+        const [headers, bodies, versions, assetSizes] = await Promise.all([
+            db.listHeaders(), db.getAllBodies(), db.getAllVersionBodies(), db.listAssetSizes()
+        ]);
+        const projects: StorageUsage['projects'] = {};
+        const references = new Map<string, Set<string>>();
+        const usageOf = (projectId: string) => {
+            if (!projects[projectId]) {
+                projects[projectId] = {bytes: 0, versionCount: 0};
+                references.set(projectId, new Set());
+            }
+            return projects[projectId];
+        };
+        let totalBytes = 0;
+        const add = (projectId: string, bytes: number) => {
+            usageOf(projectId).bytes += bytes;
+            totalBytes += bytes;
+        };
+        for (const header of headers) {
+            add(header.id, header.thumbnail ? header.thumbnail.size : 0);
+        }
+        for (const {id, body} of bodies) {
+            add(id, body.length);
+            extractReferencedAssets(body, references.get(id) as Set<string>);
+        }
+        for (const version of versions) {
+            add(version.projectId, version.body.length + (version.thumbnail ? version.thumbnail.size : 0));
+            usageOf(version.projectId).versionCount++;
+            extractReferencedAssets(version.body, references.get(version.projectId) as Set<string>);
         }
 
+        const ownerCounts = new Map<string, number>();
+        for (const keys of references.values()) {
+            for (const key of keys) ownerCounts.set(key, (ownerCounts.get(key) || 0) + 1);
+        }
+        for (const [projectId, keys] of references) {
+            for (const key of keys) {
+                if (ownerCounts.get(key) === 1) projects[projectId].bytes += assetSizes.get(key) || 0;
+            }
+        }
+        for (const size of assetSizes.values()) totalBytes += size;
+
+        let quota: StorageUsage['quota'];
+        try {
+            const estimate = await navigator.storage?.estimate?.();
+            if (estimate && typeof estimate.quota === 'number') {
+                quota = {usage: estimate.usage || 0, quota: estimate.quota};
+            }
+        } catch {
+            // StorageManager unavailable - show the measured total only
+        }
+        return {projects, totalBytes, quota};
+    }
+
+    /*
+     * Before deleting the versions in `toDeleteSet`, point each surviving
+     * version whose parent is being deleted at its nearest surviving
+     * ancestor, optionally recomputing its diff against that ancestor.
+     */
+    private async reparentSurvivors (
+        versions: db.ProjectVersion[],
+        toDeleteSet: Set<number>,
+        recomputeDiff: boolean
+    ): Promise<void> {
+        const byTimestamp = new Map(versions.map(v => [v.timestamp, v]));
         const getSurvivingAncestor = (ts: number): number | null => {
-            let curr = parentMap.get(ts) || null;
+            let curr = byTimestamp.get(ts)?.parentTimestamp || null;
             while (curr && toDeleteSet.has(curr)) {
-                curr = parentMap.get(curr) || null;
+                curr = byTimestamp.get(curr)?.parentTimestamp || null;
             }
             return curr;
         };
 
         const reparentPromises: Array<Promise<unknown>> = [];
         for (const v of versions) {
-            if (v.timestamp !== timestamp) {
-                const pTs = v.parentTimestamp || null;
-                if (pTs === timestamp) {
-                    const newParentTs = getSurvivingAncestor(v.timestamp);
-                    const newParentObj = newParentTs ? versions.find(ver => ver.timestamp === newParentTs) : null;
-                    const oldBody = newParentObj ? newParentObj.body : null;
-                    const newDiff = computeVersionDiff(oldBody, v.body);
-                    
-                    reparentPromises.push(db.putVersion({ ...v, parentTimestamp: newParentTs, diff: newDiff }));
-                }
+            const pTs = v.parentTimestamp || null;
+            if (toDeleteSet.has(v.timestamp) || !pTs || !toDeleteSet.has(pTs)) continue;
+            const newParentTs = getSurvivingAncestor(v.timestamp);
+            const updated = {...v, parentTimestamp: newParentTs};
+            if (recomputeDiff) {
+                const newParent = newParentTs ? byTimestamp.get(newParentTs) : null;
+                updated.diff = computeVersionDiff(newParent ? newParent.body : null, v.body);
             }
+            reparentPromises.push(db.putVersion(updated));
         }
         await Promise.all(reparentPromises);
-        await db.deleteVersions([[idString, timestamp]]);
     }
 
     private resolveId (id: string): string | null {
@@ -659,31 +750,7 @@ export class LocalProjectStorage implements GUIStorage {
         });
         if (toDelete.length === 0) return;
 
-        const toDeleteSet = new Set(toDelete);
-        const parentMap = new Map<number, number | null>();
-        for (const v of versions) {
-            parentMap.set(v.timestamp, v.parentTimestamp || null);
-        }
-
-        const getSurvivingAncestor = (ts: number): number | null => {
-            let curr = parentMap.get(ts) || null;
-            while (curr && toDeleteSet.has(curr)) {
-                curr = parentMap.get(curr) || null;
-            }
-            return curr;
-        };
-
-        const reparentPromises: Array<Promise<unknown>> = [];
-        for (const v of versions) {
-            if (!toDeleteSet.has(v.timestamp)) {
-                const pTs = v.parentTimestamp || null;
-                if (pTs && toDeleteSet.has(pTs)) {
-                    const newParent = getSurvivingAncestor(v.timestamp);
-                    reparentPromises.push(db.putVersion({ ...v, parentTimestamp: newParent }));
-                }
-            }
-        }
-        await Promise.all(reparentPromises);
+        await this.reparentSurvivors(versions, new Set(toDelete), false);
 
         await db.deleteVersions(toDelete.map(ts => [projectId, ts]));
         // Thinned versions may have been the last reference to some assets.
