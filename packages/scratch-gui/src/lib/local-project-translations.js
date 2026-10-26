@@ -46,6 +46,14 @@ const localProjectTranslations = {
         'xcratch.projectHistory.prune': '履歴を整理',
         'xcratch.projectHistory.pruneConfirm': '{count} 件の履歴を削除しますか?最新の版と、ロックした版・コメント付きの版は残ります。この操作は元に戻せません。',
         'xcratch.projectHistory.pruneNothing': '削除できる履歴はありません。',
+        'xcratch.projectLibrary.export': 'バックアップ',
+        'xcratch.projectLibrary.exportTitle': '表示中のプロジェクトを履歴ごとファイルに保存する',
+        'xcratch.projectLibrary.import': '復元',
+        'xcratch.projectLibrary.importTitle': 'バックアップファイルのプロジェクトをこのブラウザーに追加する',
+        'xcratch.projectLibrary.exportMissingAssets': '{count} 個のコスチュームや音が見つからず、バックアップに含まれていません。',
+        'xcratch.projectLibrary.exportFailed': 'バックアップを作成できませんでした: {error}',
+        'xcratch.projectLibrary.importDone': '{imported} 件のプロジェクトを復元しました。このブラウザーにすでにある {skipped} 件はスキップしました。',
+        'xcratch.projectLibrary.importFailed': 'このファイルから復元できませんでした: {error}',
         'xcratch.projectConflict.confirm': 'このプロジェクトは別のタブで更新されています。\n' +
             'OK: このタブの内容で上書き保存する\n' +
             'キャンセル: このタブの変更を破棄して、最新の保存内容を読み込む'
@@ -96,6 +104,14 @@ const localProjectTranslations = {
         'xcratch.projectHistory.pruneConfirm': '{count} けんのりれきをさくじょしますか?' +
             'さいしんのばんと、ロックしたばん・コメントつきのばんはのこります。このそうさはもとにもどせません。',
         'xcratch.projectHistory.pruneNothing': 'さくじょできるりれきはありません。',
+        'xcratch.projectLibrary.export': 'バックアップ',
+        'xcratch.projectLibrary.exportTitle': 'みえているプロジェクトをりれきごとファイルにほぞんする',
+        'xcratch.projectLibrary.import': 'ふくげん',
+        'xcratch.projectLibrary.importTitle': 'バックアップファイルのプロジェクトをこのブラウザーにくわえる',
+        'xcratch.projectLibrary.exportMissingAssets': '{count} こ のコスチュームやおとがみつからず、バックアップにはいっていません。',
+        'xcratch.projectLibrary.exportFailed': 'バックアップをつくれませんでした: {error}',
+        'xcratch.projectLibrary.importDone': '{imported} けんのプロジェクトをふくげんしました。このブラウザーにすでにある {skipped} けんはとばしました。',
+        'xcratch.projectLibrary.importFailed': 'このファイルからふくげんできませんでした: {error}',
         'xcratch.projectConflict.confirm': 'このプロジェクトはべつのタブでこうしんされています。\n' +
             'OK: このタブのないようでうわがきほぞんする\n' +
             'キャンセル: このタブのへんこうをすてて、さいしんのほぞんないようをよみこむ'

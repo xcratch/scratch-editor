@@ -479,3 +479,23 @@
 .prune-button {
     margin-left: auto;
 }
+
+.backup-buttons {
+    display: flex;
+    gap: 0.5rem;
+    margin-left: auto;
+}
+
+.usage-summary + .backup-buttons {
+    margin-left: 0;
+}
+
+.backup-buttons .disabled {
+    opacity: 0.5;
+    cursor: auto;
+    pointer-events: none;
+}
+
+.file-input {
+    display: none;
+}

@@ -5,6 +5,7 @@ import {GUIStorage, ProjectId, StorageUsage, TranslatorFunction} from '../gui-co
 
 import * as db from './local-project-db';
 import {computeVersionDiff, VersionDiff} from './project-diff';
+import {exportBackup, importBackup} from './local-project-backup';
 
 const LAST_PROJECT_KEY = 'xcratch:lastLocalProjectId';
 
@@ -681,6 +682,28 @@ export class LocalProjectStorage implements GUIStorage {
             // StorageManager unavailable - show the measured total only
         }
         return {projects, totalBytes, quota};
+    }
+
+    /*
+     * Build a backup zip of the given projects with their history and
+     * assets. Assets not stored locally (library assets) are loaded through
+     * scratchStorage, i.e. from the CDN.
+     */
+    exportProjects (ids: ProjectId[]): Promise<{blob: Blob; projectCount: number; missingAssets: number}> {
+        const storage = this.scratchStorage;
+        return exportBackup(ids.map(String), (assetTypeName, assetId, dataFormat) =>
+            storage.load(
+                storage.AssetType[assetTypeName as keyof typeof storage.AssetType],
+                assetId,
+                dataFormat as DataFormat
+            ).then(asset => asset?.data ?? null)
+        );
+    }
+
+    // Restored projects never overwrite stored ones (see importBackup), so
+    // no per-project state of this tab needs updating.
+    importProjects (file: Blob): Promise<{imported: number; skipped: number}> {
+        return importBackup(file, generateProjectId);
     }
 
     /*
