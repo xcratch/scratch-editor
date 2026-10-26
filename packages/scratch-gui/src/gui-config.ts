@@ -84,6 +84,9 @@ export interface GUIStorage {
     canManageVersions?(id: ProjectId): boolean;
     getVersionPlayerUrl?(id: ProjectId, timestamp: number): string;
     getVersionEditorUrl?(id: ProjectId, timestamp: number): string;
+    // Backup of projects with their history as a zip, and its restore
+    exportProjects?(ids: ProjectId[]): Promise<{blob: Blob; projectCount: number; missingAssets: number}>;
+    importProjects?(file: Blob): Promise<{imported: number; skipped: number}>;
 
     // Force-saves a new version with a comment and keep flag set at creation
     // time (e.g. from an extension block via runtime.saveProjectVersion).
@@ -135,6 +138,8 @@ export const GUIStoragePropType = PropTypes.shape({
     canManageVersions: PropTypes.func,
     getVersionPlayerUrl: PropTypes.func,
     getVersionEditorUrl: PropTypes.func,
+    exportProjects: PropTypes.func,
+    importProjects: PropTypes.func,
 
     saveVersionWithMeta: PropTypes.func
 });

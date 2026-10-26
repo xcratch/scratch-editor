@@ -7,6 +7,8 @@ import VM from '@scratch/scratch-vm';
 
 import intlShape from '../lib/intlShape.js';
 import log from '../lib/log.js';
+import downloadBlob from '../lib/download-blob.js';
+import {filterAndSortProjects} from '../lib/project-list-filter.js';
 import {GUIStoragePropType} from '../gui-config';
 import ProjectLibraryComponent from '../components/project-library/project-library.jsx';
 
@@ -53,12 +55,39 @@ const messages = defineMessages({
         defaultMessage: 'There are no versions to delete.',
         description: 'Message shown when cleaning up history finds nothing to delete'
     },
+    exportMissingAssets: {
+        id: 'xcratch.projectLibrary.exportMissingAssets',
+        defaultMessage: '{count} costumes or sounds could not be found and are not in the backup.',
+        description: 'Warning shown after a backup when some assets could not be loaded'
+    },
+    exportFailed: {
+        id: 'xcratch.projectLibrary.exportFailed',
+        defaultMessage: 'Could not create the backup: {error}',
+        description: 'Message shown when creating a backup of browser projects fails'
+    },
+    importDone: {
+        id: 'xcratch.projectLibrary.importDone',
+        defaultMessage: 'Restored {imported} projects. Skipped {skipped} projects already in this browser.',
+        description: 'Message shown after restoring projects from a backup file'
+    },
+    importFailed: {
+        id: 'xcratch.projectLibrary.importFailed',
+        defaultMessage: 'Could not restore from this file: {error}',
+        description: 'Message shown when restoring projects from a backup file fails'
+    },
     deleteVersionConfirm: {
         id: 'xcratch.projectHistory.deleteVersionConfirm',
         defaultMessage: 'Are you sure you want to delete this version? This cannot be undone.',
         description: 'Confirmation shown before deleting a project version'
     }
 });
+
+// Local date and time for the backup filename, e.g. 20261026-0930
+const backupTimestamp = date => {
+    const pad = n => String(n).padStart(2, '0');
+    return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-` +
+        `${pad(date.getHours())}${pad(date.getMinutes())}`;
+};
 
 class ProjectLibrary extends React.Component {
     constructor (props) {
@@ -78,6 +107,8 @@ class ProjectLibrary extends React.Component {
             'handleConfirmRestore',
             'handleCancelRestore',
             'handleDeleteVersion',
+            'handleExportProjects',
+            'handleImportProjects',
             'handlePruneVersions',
             'handleSearchChange',
             'handleSortChange'
@@ -101,7 +132,9 @@ class ProjectLibrary extends React.Component {
             sortOrder: 'modified',
             // Result of storage.getStorageUsage(); null until measured or when
             // the storage cannot measure (workshop mode)
-            usage: null
+            usage: null,
+            // True while a backup is being written or restored
+            backupBusy: false
         };
         this.objectUrls = [];
         this.versionObjectUrls = [];
@@ -223,6 +256,48 @@ class ProjectLibrary extends React.Component {
         this.props.storage.deleteProject(id)
             .then(() => this.loadProjects())
             .catch(err => log.error(err));
+    }
+    handleExportProjects () {
+        const {projects, searchQuery, sortOrder, usage} = this.state;
+        // Back up exactly the projects the list shows (search applied)
+        const ids = filterAndSortProjects(projects, {query: searchQuery, sortOrder, usage}).map(p => p.id);
+        if (ids.length === 0) return;
+        const {intl} = this.props;
+        this.setState({backupBusy: true});
+        this.props.storage.exportProjects(ids)
+            .then(({blob, missingAssets}) => {
+                downloadBlob(`xcratch-projects-${backupTimestamp(new Date())}.zip`, blob);
+                if (missingAssets > 0) {
+                    // eslint-disable-next-line no-alert
+                    alert(intl.formatMessage(messages.exportMissingAssets, {count: missingAssets}));
+                }
+            })
+            .catch(err => {
+                log.error(err);
+                // eslint-disable-next-line no-alert
+                alert(intl.formatMessage(messages.exportFailed, {error: err.message}));
+            })
+            .then(() => this.setState({backupBusy: false}));
+    }
+    handleImportProjects (e) {
+        const file = e.target.files && e.target.files[0];
+        // Clear the input so choosing the same file again fires onChange
+        e.target.value = '';
+        if (!file) return;
+        const {intl} = this.props;
+        this.setState({backupBusy: true});
+        this.props.storage.importProjects(file)
+            .then(({imported, skipped}) => {
+                // eslint-disable-next-line no-alert
+                alert(intl.formatMessage(messages.importDone, {imported, skipped}));
+                return this.loadProjects();
+            })
+            .catch(err => {
+                log.error(err);
+                // eslint-disable-next-line no-alert
+                alert(intl.formatMessage(messages.importFailed, {error: err.message}));
+            })
+            .then(() => this.setState({backupBusy: false}));
     }
     toVersionItems (versions) {
         return versions.map(version => {
@@ -392,6 +467,9 @@ class ProjectLibrary extends React.Component {
         const historyProjectName = project ? project.name : (this.props.currentProjectTitle || '');
         return (
             <ProjectLibraryComponent
+                backupBusy={this.state.backupBusy}
+                canBackup={typeof storage.exportProjects === 'function' &&
+                    typeof storage.importProjects === 'function'}
                 canManageVersions={this.state.canManage}
                 canPlayVersion={typeof storage.getVersionPlayerUrl === 'function'}
                 canPruneVersions={typeof storage.pruneVersions === 'function'}
@@ -413,6 +491,8 @@ class ProjectLibrary extends React.Component {
                 onCopyProject={this.handleCopyProject}
                 onDeleteProject={this.handleDeleteProject}
                 onDeleteVersion={this.handleDeleteVersion}
+                onExportProjects={this.handleExportProjects}
+                onImportProjects={this.handleImportProjects}
                 onOpenProject={this.handleOpenProject}
                 onPruneVersions={this.handlePruneVersions}
                 onSearchChange={this.handleSearchChange}

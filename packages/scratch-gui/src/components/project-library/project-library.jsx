@@ -53,6 +53,16 @@ const messages = defineMessages({
         id: 'xcratch.projectLibrary.sortSize',
         defaultMessage: 'Size',
         description: 'Sort option: largest projects first'
+    },
+    exportTitle: {
+        id: 'xcratch.projectLibrary.exportTitle',
+        defaultMessage: 'Save the listed projects with their history to a file',
+        description: 'Tooltip of the backup button in the project list'
+    },
+    importTitle: {
+        id: 'xcratch.projectLibrary.importTitle',
+        defaultMessage: 'Add the projects in a backup file to this browser',
+        description: 'Tooltip of the restore button in the project list'
     }
 });
 
@@ -65,6 +75,8 @@ const sortMessages = {
 
 const ProjectLibraryComponent = props => {
     const {
+        backupBusy,
+        canBackup,
         canManageVersions,
         canPlayVersion,
         canPruneVersions,
@@ -81,6 +93,8 @@ const ProjectLibraryComponent = props => {
         onCopyProject,
         onDeleteProject,
         onDeleteVersion,
+        onExportProjects,
+        onImportProjects,
         onOpenProject,
         onPlayVersion,
         onPruneVersions,
@@ -101,7 +115,7 @@ const ProjectLibraryComponent = props => {
         view
     } = props;
 
-    const renderToolbar = () => (
+    const renderToolbar = visibleProjects => (
         <div className={styles.listToolbar}>
             <input
                 className={styles.searchInput}
@@ -147,6 +161,39 @@ const ProjectLibraryComponent = props => {
                         />
                     )}
                 </span>
+            )}
+            {canBackup && (
+                <div className={styles.backupButtons}>
+                    <button
+                        className={styles.itemButton}
+                        disabled={backupBusy || visibleProjects.length === 0}
+                        title={intl.formatMessage(messages.exportTitle)}
+                        onClick={onExportProjects}
+                    >
+                        <FormattedMessage
+                            defaultMessage="Back up"
+                            description="Button to save the listed projects with their history to a backup file"
+                            id="xcratch.projectLibrary.export"
+                        />
+                    </button>
+                    <label
+                        className={classNames(styles.itemButton, {[styles.disabled]: backupBusy})}
+                        title={intl.formatMessage(messages.importTitle)}
+                    >
+                        <FormattedMessage
+                            defaultMessage="Restore"
+                            description="Button to restore projects from a backup file"
+                            id="xcratch.projectLibrary.import"
+                        />
+                        <input
+                            accept=".zip,application/zip"
+                            className={styles.fileInput}
+                            disabled={backupBusy}
+                            type="file"
+                            onChange={onImportProjects}
+                        />
+                    </label>
+                </div>
             )}
         </div>
     );
@@ -197,7 +244,7 @@ const ProjectLibraryComponent = props => {
         const visibleProjects = filterAndSortProjects(projects, {query: searchQuery, sortOrder, usage});
         return (
             <div className={styles.listContainer}>
-                {renderToolbar()}
+                {renderToolbar(visibleProjects)}
                 {renderGrid(visibleProjects)}
             </div>
         );
@@ -352,6 +399,8 @@ const ProjectLibraryComponent = props => {
 };
 
 ProjectLibraryComponent.propTypes = {
+    backupBusy: PropTypes.bool,
+    canBackup: PropTypes.bool,
     canManageVersions: PropTypes.bool,
     canPlayVersion: PropTypes.bool,
     canPruneVersions: PropTypes.bool,
@@ -368,6 +417,8 @@ ProjectLibraryComponent.propTypes = {
     onCopyProject: PropTypes.func.isRequired,
     onDeleteProject: PropTypes.func.isRequired,
     onDeleteVersion: PropTypes.func.isRequired,
+    onExportProjects: PropTypes.func,
+    onImportProjects: PropTypes.func,
     onOpenProject: PropTypes.func.isRequired,
     onPlayVersion: PropTypes.func,
     onPruneVersions: PropTypes.func,
@@ -411,6 +462,8 @@ ProjectLibraryComponent.propTypes = {
 };
 
 ProjectLibraryComponent.defaultProps = {
+    backupBusy: false,
+    canBackup: false,
     canManageVersions: true,
     canPlayVersion: false,
     canPruneVersions: false,
