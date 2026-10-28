@@ -28,6 +28,29 @@ const builtinExtensions = {
 };
 
 /**
+ * Timeout for each attempt to load an extension from URL [ms].
+ * A module which imports from a blocked host (e.g. a CDN behind a school firewall) may never settle,
+ * and it must not keep the project from being loaded.
+ */
+const EXTENSION_LOAD_TIMEOUT = 30000;
+
+/**
+ * Reject when the promise does not settle within the timeout.
+ * @param {Promise} promise - promise to wait for
+ * @param {number} timeout - timeout [ms]
+ * @param {string} label - label for the error message
+ * @returns {Promise} promise which settles with the given one or rejects on timeout
+ */
+const withTimeout = (promise, timeout, label) => {
+    let timeoutId;
+    const timer = new Promise((resolve, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(`Timed out after ${timeout} ms: ${label}`)), timeout);
+    });
+    return Promise.race([promise, timer])
+        .finally(() => clearTimeout(timeoutId));
+};
+
+/**
  * @typedef {object} ArgumentInfo - Information about an extension block argument
  * @property {ArgumentType} type - the type of value this argument can take
  * @property {*|undefined} default - the default value of this argument (default: blank)
@@ -144,18 +167,27 @@ class ExtensionManager {
     /**
      * Load a TurboWarp-compatible extension (calls Scratch.extensions.register()) via a script tag.
      * @param {string} extensionURL - URL for the extension script.
+     * @param {number} timeout - time to wait for the extension to register [ms].
      * @returns {Promise<{entry: object, blockClass: Function}>}
      */
-    fetchExtensionTurboWarp (extensionURL) {
+    fetchExtensionTurboWarp (extensionURL, timeout = EXTENSION_LOAD_TIMEOUT) {
         const vm = this.vm || this.runtime;
         return new Promise((resolve, reject) => {
             const previousScratch = window.Scratch;
+            const script = document.createElement('script');
+            let timeoutId = null;
             let settled = false;
             const settle = fn => (...args) => {
                 if (settled) return;
                 settled = true;
+                clearTimeout(timeoutId);
                 window.Scratch = previousScratch;
                 fn(...args);
+            };
+            const fail = error => {
+                if (settled) return;
+                script.remove();
+                settle(reject)(error);
             };
 
             // Build the Scratch global following TurboWarp's unsandboxed extension API.
@@ -171,7 +203,7 @@ class ExtensionManager {
                     register: instance => {
                         const info = instance.getInfo();
                         if (!info || !info.id) {
-                            settle(reject)(new Error('Extension getInfo() returned invalid data'));
+                            fail(new Error('Extension getInfo() returned invalid data'));
                             return;
                         }
                         const entry = {
@@ -219,11 +251,18 @@ class ExtensionManager {
 
             window.Scratch = Scratch;
 
-            const script = document.createElement('script');
             script.src = extensionURL;
             script.onerror = () => {
-                settle(reject)(new Error(`Failed to load script: ${extensionURL}`));
+                fail(new Error(`Failed to load script: ${extensionURL}`));
             };
+            // TurboWarp extensions register while the script runs. A script which ran without registering,
+            // e.g. an ES module failed to be evaluated as a classic script, would never settle.
+            script.onload = () => {
+                fail(new Error(`Extension did not register: ${extensionURL}`));
+            };
+            timeoutId = setTimeout(() => {
+                fail(new Error(`Timed out after ${timeout} ms: ${extensionURL}`));
+            }, timeout);
             document.body.appendChild(script);
         });
     }
@@ -410,7 +449,7 @@ class ExtensionManager {
 
         // To access the runtime even in outer extensions, it loaded by dynamic import() instead of extension-worker.
         // Try xcratch format first, then TurboWarp format, then fall back to preloaded version.
-        return this.fetchExtension(extensionURL)
+        return withTimeout(this.fetchExtension(extensionURL), EXTENSION_LOAD_TIMEOUT, extensionURL)
             .then(({entry, blockClass}) => {
                 this.registerExtensionBlock(entry, blockClass);
             })
