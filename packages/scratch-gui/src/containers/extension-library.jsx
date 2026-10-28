@@ -88,6 +88,29 @@ let preloadedExtensions = [];
 let preloaded = false;
 
 /**
+ * Timeout for loading each preloaded extension module [ms].
+ * A module which imports from a blocked host (e.g. a CDN behind a school firewall) may never settle,
+ * and it must not keep the other preloaded extensions from being registered.
+ */
+const preloadModuleTimeout = 30000;
+
+/**
+ * Reject when the promise does not settle within the timeout.
+ * @param {Promise} promise - promise to wait for
+ * @param {number} timeout - timeout [ms]
+ * @param {string} label - label for the error message
+ * @returns {Promise} promise which settles with the given one or rejects on timeout
+ */
+const withTimeout = (promise, timeout, label) => {
+    let timeoutId;
+    const timer = new Promise((resolve, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(`Timed out after ${timeout} ms: ${label}`)), timeout);
+    });
+    return Promise.race([promise, timer])
+        .finally(() => clearTimeout(timeoutId));
+};
+
+/**
  * Load preloaded extensions
  * @returns {Promise<Array<{entry: object, blockClass: object}>>} - Preloaded extensions
  */
@@ -176,7 +199,8 @@ const loadModules = async () => {
 
                     if (isSeparate) {
                         // Separate type: load only entry.mjs
-                        const entryModule = await preloadModulesContext(filesInDir.entry);
+                        const entryModule = await withTimeout(
+                            preloadModulesContext(filesInDir.entry), preloadModuleTimeout, ext.url);
                         return {
                             entry: entryModule.entry,
                             blockClass: null,
@@ -188,7 +212,8 @@ const loadModules = async () => {
                     }
                     if (hasExtension) {
                         // Integrated type: load extension.mjs with both entry and blockClass
-                        const extensionModule = await preloadModulesContext(filesInDir.extension);
+                        const extensionModule = await withTimeout(
+                            preloadModulesContext(filesInDir.extension), preloadModuleTimeout, ext.url);
                         return {
                             entry: extensionModule.entry,
                             blockClass: extensionModule.blockClass,
