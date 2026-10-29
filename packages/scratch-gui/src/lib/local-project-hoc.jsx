@@ -13,7 +13,7 @@ import {
     requestProjectUpload
 } from '../reducers/project-state';
 import {setProjectTitle} from '../reducers/project-title';
-import {openLoadingProject, closeLoadingProject} from '../reducers/modals';
+import {openLoadingProject, closeLoadingProject, openStartScreen} from '../reducers/modals';
 import {GUIStoragePropType} from '../gui-config';
 import {isLocalProjectId} from './local-project-storage';
 
@@ -50,6 +50,8 @@ const waitUntilVisible = () => {
  *   (renaming alone does not mark a project as changed, so titles are
  *   persisted here rather than by the save flow)
  * - reflects the local project id into the URL via onUpdateProjectId
+ * - opens the start screen on mount when showStartScreen is set (no project
+ *   was named by the URL)
  * - intercepts saves (via ProjectSaverHOC's onUpdateProjectData seam) to
  *   detect multi-tab conflicts: when another tab has updated the project,
  *   the user chooses between overwriting and discarding this tab's changes
@@ -76,6 +78,10 @@ const LocalProjectHOC = function (WrappedComponent) {
         }
         componentDidMount () {
             this.props.storage.noteProjectTitle?.(this.props.reduxProjectTitle);
+            // Opened before the default project finishes loading, so
+            // ProjectSaverHOC does not create a record for it behind the
+            // start screen.
+            if (this.props.showStartScreen) this.props.onOpenStartScreen();
         }
         componentDidUpdate (prevProps) {
             if (this.props.reduxProjectTitle !== prevProps.reduxProjectTitle) {
@@ -195,9 +201,11 @@ const LocalProjectHOC = function (WrappedComponent) {
                 loadingState: _loadingState,
                 onLoadingFinished: _onLoadingFinished,
                 onLoadingStarted: _onLoadingStarted,
+                onOpenStartScreen: _onOpenStartScreen,
                 onSetProjectTitle: _onSetProjectTitle,
                 reduxProjectId: _reduxProjectId,
                 reduxProjectTitle: _reduxProjectTitle,
+                showStartScreen: _showStartScreen,
                 storage: _storage,
                 vm: _vm,
                 ...componentProps
@@ -219,10 +227,12 @@ const LocalProjectHOC = function (WrappedComponent) {
         loadingState: PropTypes.string,
         onLoadingFinished: PropTypes.func,
         onLoadingStarted: PropTypes.func,
+        onOpenStartScreen: PropTypes.func,
         onSetProjectTitle: PropTypes.func,
         onUpdateProjectId: PropTypes.func,
         reduxProjectId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
         reduxProjectTitle: PropTypes.string,
+        showStartScreen: PropTypes.bool,
         storage: GUIStoragePropType,
         vm: PropTypes.instanceOf(VM)
     };
@@ -249,6 +259,7 @@ const LocalProjectHOC = function (WrappedComponent) {
             dispatch(onLoadedProject(loadingState, canSave, success));
             dispatch(closeLoadingProject());
         },
+        onOpenStartScreen: () => dispatch(openStartScreen()),
         onSetProjectTitle: title => dispatch(setProjectTitle(title))
     });
     return connect(

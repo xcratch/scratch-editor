@@ -23,6 +23,7 @@ import {
     closeCostumeLibrary,
     closeBackdropLibrary,
     closeProjectLibrary,
+    closeStartScreen,
     closeTelemetryModal,
     openExtensionLibrary,
     closeDebugModal
@@ -181,6 +182,7 @@ const mapStateToProps = (state, ownProps) => {
         projectLibraryVisible: state.scratchGui.modals.projectLibrary,
         saveVersionModalVisible: state.scratchGui.modals.saveVersion,
         soundsTabVisible: state.scratchGui.editorTab.activeTabIndex === SOUNDS_TAB_INDEX,
+        startScreenVisible: state.scratchGui.modals.startScreen,
         targetIsStage: (
             state.scratchGui.targets.stage &&
             state.scratchGui.targets.stage.id === state.scratchGui.targets.editingTarget
@@ -201,6 +203,7 @@ const mapDispatchToProps = dispatch => ({
     onRequestCloseCostumeLibrary: () => dispatch(closeCostumeLibrary()),
     onRequestCloseDebugModal: () => dispatch(closeDebugModal()),
     onRequestCloseProjectLibrary: () => dispatch(closeProjectLibrary()),
+    onRequestCloseStartScreen: () => dispatch(closeStartScreen()),
     onRequestCloseTelemetryModal: () => dispatch(closeTelemetryModal())
 });
 

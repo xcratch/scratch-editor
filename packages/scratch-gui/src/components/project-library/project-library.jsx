@@ -5,6 +5,7 @@ import {defineMessages, injectIntl, FormattedMessage} from 'react-intl';
 import intlShape from '../../lib/intlShape.js';
 
 import Modal from '../../containers/modal.jsx';
+import StartScreen from '../start-screen/start-screen.jsx';
 import Spinner from '../spinner/spinner.jsx';
 import ProjectItem from './project-item.jsx';
 import VersionRow from './version-row.jsx';
@@ -90,11 +91,14 @@ const ProjectLibraryComponent = props => {
         onBackToList,
         onCancelRestore,
         onConfirmRestore,
+        onContinue,
         onCopyProject,
         onDeleteProject,
         onDeleteVersion,
         onExportProjects,
         onImportProjects,
+        onLoadFromComputer,
+        onNewProject,
         onOpenProject,
         onPlayVersion,
         onPruneVersions,
@@ -111,6 +115,7 @@ const ProjectLibraryComponent = props => {
         searchQuery,
         sortOrder,
         usage,
+        variant,
         versions,
         view
     } = props;
@@ -334,13 +339,8 @@ const ProjectLibraryComponent = props => {
         );
     };
 
-    return (
-        <Modal
-            fullScreen
-            contentLabel={intl.formatMessage(messages.libraryTitle)}
-            id="projectLibrary"
-            onRequestClose={onRequestClose}
-        >
+    const content = (
+        <React.Fragment>
             {view === 'history' ? renderHistory() : renderList()}
             {confirmRestoreTimestamp && (
                 <div className={styles.restoreDialogOverlay}>
@@ -394,6 +394,34 @@ const ProjectLibraryComponent = props => {
                     </div>
                 </div>
             )}
+        </React.Fragment>
+    );
+
+    if (variant === 'start') {
+        // Most recently modified first, as listHeaders() returns them
+        const continueProject = projects.length > 0 ? projects[0] : null;
+        return (
+            <StartScreen
+                continueProject={continueProject}
+                onContinue={onContinue}
+                onLoadFromComputer={onLoadFromComputer}
+                onNewProject={onNewProject}
+            >
+                <div className={styles.startVariant}>
+                    {content}
+                </div>
+            </StartScreen>
+        );
+    }
+
+    return (
+        <Modal
+            fullScreen
+            contentLabel={intl.formatMessage(messages.libraryTitle)}
+            id="projectLibrary"
+            onRequestClose={onRequestClose}
+        >
+            {content}
         </Modal>
     );
 };
@@ -414,11 +442,14 @@ ProjectLibraryComponent.propTypes = {
     onBackToList: PropTypes.func.isRequired,
     onCancelRestore: PropTypes.func.isRequired,
     onConfirmRestore: PropTypes.func.isRequired,
+    onContinue: PropTypes.func,
     onCopyProject: PropTypes.func.isRequired,
     onDeleteProject: PropTypes.func.isRequired,
     onDeleteVersion: PropTypes.func.isRequired,
     onExportProjects: PropTypes.func,
     onImportProjects: PropTypes.func,
+    onLoadFromComputer: PropTypes.func,
+    onNewProject: PropTypes.func,
     onOpenProject: PropTypes.func.isRequired,
     onPlayVersion: PropTypes.func,
     onPruneVersions: PropTypes.func,
@@ -441,6 +472,7 @@ ProjectLibraryComponent.propTypes = {
     })).isRequired,
     searchQuery: PropTypes.string,
     sortOrder: PropTypes.oneOf(SORT_ORDERS),
+    variant: PropTypes.oneOf(['modal', 'start']),
     usage: PropTypes.shape({
         projects: PropTypes.objectOf(PropTypes.shape({
             bytes: PropTypes.number,

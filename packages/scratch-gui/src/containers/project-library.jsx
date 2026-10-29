@@ -14,7 +14,9 @@ import ProjectLibraryComponent from '../components/project-library/project-libra
 
 import {
     LoadingState,
+    getIsShowingWithoutId,
     onLoadedProject,
+    requestNewProject,
     requestProjectUpload,
     setProjectId
 } from '../reducers/project-state';
@@ -94,6 +96,7 @@ class ProjectLibrary extends React.Component {
         super(props);
         bindAll(this, [
             'handleBackToList',
+            'handleContinue',
             'handleCopyProject',
             'handleDeleteProject',
             'handleOpenProject',
@@ -109,6 +112,8 @@ class ProjectLibrary extends React.Component {
             'handleDeleteVersion',
             'handleExportProjects',
             'handleImportProjects',
+            'handleLoadFromComputer',
+            'handleNewProject',
             'handlePruneVersions',
             'handleSearchChange',
             'handleSortChange'
@@ -224,6 +229,29 @@ class ProjectLibrary extends React.Component {
         // its header. LocalProjectHOC restores the title after loading.
         this.props.onSetProjectId(id);
         this.props.onRequestClose();
+    }
+    handleContinue () {
+        // The list is sorted by last modified, newest first
+        const project = this.state.projects[0];
+        if (project) this.handleOpenProject(project.id);
+    }
+    handleNewProject () {
+        // Behind the start screen at startup, the default project is already
+        // showing and is created in storage once the start screen closes.
+        if (!this.props.isShowingWithoutId) {
+            if (this.props.projectChanged) {
+                // eslint-disable-next-line no-alert
+                const readyToReplace = confirm(this.props.intl.formatMessage(messages.openConfirm));
+                if (!readyToReplace) return;
+            }
+            this.props.onRequestNewProject();
+        }
+        this.props.onRequestClose();
+    }
+    handleLoadFromComputer () {
+        // Opens the file picker; the chosen file becomes a new project, and
+        // the uploader closes the start screen once a file is chosen.
+        this.props.onStartSelectingFileUpload({asNewProject: true});
     }
     handleCopyProject (id) {
         if (typeof this.props.storage.duplicateProject !== 'function') return;
@@ -483,16 +511,20 @@ class ProjectLibrary extends React.Component {
                 searchQuery={this.state.searchQuery}
                 sortOrder={this.state.sortOrder}
                 usage={this.state.usage}
+                variant={this.props.variant}
                 versions={this.state.versions}
                 view={this.state.view}
                 onBackToList={this.handleBackToList}
                 onCancelRestore={this.handleCancelRestore}
                 onConfirmRestore={this.handleConfirmRestore}
+                onContinue={this.handleContinue}
                 onCopyProject={this.handleCopyProject}
                 onDeleteProject={this.handleDeleteProject}
                 onDeleteVersion={this.handleDeleteVersion}
                 onExportProjects={this.handleExportProjects}
                 onImportProjects={this.handleImportProjects}
+                onLoadFromComputer={this.handleLoadFromComputer}
+                onNewProject={this.handleNewProject}
                 onOpenProject={this.handleOpenProject}
                 onPruneVersions={this.handlePruneVersions}
                 onSearchChange={this.handleSearchChange}
@@ -514,19 +546,28 @@ ProjectLibrary.propTypes = {
     canSave: PropTypes.bool,
     currentProjectTitle: PropTypes.string,
     intl: intlShape.isRequired,
+    isShowingWithoutId: PropTypes.bool,
     loadingState: PropTypes.string,
     onLoadingFinished: PropTypes.func.isRequired,
     onLoadingStarted: PropTypes.func.isRequired,
     onRequestClose: PropTypes.func.isRequired,
+    onRequestNewProject: PropTypes.func.isRequired,
     onSetProjectId: PropTypes.func.isRequired,
+    onStartSelectingFileUpload: PropTypes.func,
     projectChanged: PropTypes.bool,
     reduxProjectId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
     storage: GUIStoragePropType.isRequired,
+    variant: PropTypes.oneOf(['modal', 'start']),
     vm: PropTypes.instanceOf(VM).isRequired
+};
+
+ProjectLibrary.defaultProps = {
+    variant: 'modal'
 };
 
 const mapStateToProps = state => ({
     currentProjectTitle: state.scratchGui.projectTitle,
+    isShowingWithoutId: getIsShowingWithoutId(state.scratchGui.projectState.loadingState),
     loadingState: state.scratchGui.projectState.loadingState,
     projectChanged: state.scratchGui.projectChanged,
     reduxProjectId: state.scratchGui.projectState.projectId,
@@ -544,6 +585,9 @@ const mapDispatchToProps = dispatch => ({
         dispatch(closeLoadingProject());
     },
     onRequestClose: () => dispatch(closeProjectLibrary()),
+    // The menu saves before opening the start screen, and handleNewProject
+    // confirms discarding later changes, so don't save here
+    onRequestNewProject: () => dispatch(requestNewProject(false)),
     onSetProjectId: id => dispatch(setProjectId(id))
 });
 
