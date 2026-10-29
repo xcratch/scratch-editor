@@ -2,6 +2,7 @@ import 'web-audio-test-api';
 
 import React from 'react';
 import configureStore from 'redux-mock-store';
+import {render} from '@testing-library/react';
 import {renderWithIntl} from '../../helpers/intl-helpers.jsx';
 import {LoadingState} from '../../../src/reducers/project-state';
 import VM from '@scratch/scratch-vm';
@@ -97,5 +98,96 @@ describe('SBFileUploaderHOC', () => {
             </IntlProvider>
         );
         expect(mockedCancelFileUpload).toHaveBeenCalled();
+    });
+
+    describe('loading as a new project (start screen)', () => {
+        let startSelecting;
+
+        // Renders with the real dispatch props (onLoadingFinished etc.), so
+        // the store records what the upload dispatches.
+        const renderUploader = (props = {}) => {
+            const Component = ({onStartSelectingFileUpload}) => {
+                startSelecting = onStartSelectingFileUpload;
+                return <div />;
+            };
+            const WrappedComponent = SBFileUploaderHOC(Component);
+            const element = extraProps => (
+                <IntlProvider
+                    locale="en"
+                    messages={{}}
+                >
+                    <WrappedComponent
+                        canSave
+                        isLoadingUpload={false}
+                        projectChanged={false}
+                        store={store}
+                        vm={vm}
+                        {...props}
+                        {...extraProps}
+                    />
+                </IntlProvider>
+            );
+            // Plain render: element() has its own IntlProvider, so rerendering
+            // keeps the same tree (and the uploader instance holding the file).
+            const {rerender} = render(element());
+            return {finishUpload: () => rerender(element({
+                isLoadingUpload: true,
+                loadingState: LoadingState.LOADING_VM_FILE_UPLOAD
+            }))};
+        };
+
+        const chooseFile = () => {
+            const inputs = document.body.querySelectorAll('input[type="file"]');
+            const input = inputs[inputs.length - 1];
+            Object.defineProperty(input, 'files', {value: [new File(['sb3'], 'Uploaded.sb3')]});
+            input.dispatchEvent(new Event('change'));
+        };
+
+        const finishedActionType = async () => {
+            await new Promise(resolve => {
+                const check = () => {
+                    const done = store.getActions().find(a => /DONE_LOADING_VM|RETURN_TO_SHOWING/.test(a.type));
+                    if (done) resolve(); else setTimeout(check, 10);
+                };
+                check();
+            });
+            return store.getActions().find(a => /DONE_LOADING_VM|RETURN_TO_SHOWING/.test(a.type)).type;
+        };
+
+        beforeEach(() => {
+            vm.loadProject = jest.fn(() => Promise.resolve());
+            window.confirm = jest.fn(() => true);
+        });
+
+        test('finishes without an id instead of saving over the current project', async () => {
+            const {finishUpload} = renderUploader({loadingState: LoadingState.SHOWING_WITH_ID});
+            startSelecting({asNewProject: true});
+            chooseFile();
+            expect(window.confirm).not.toHaveBeenCalled();
+            expect(store.getActions().map(a => a.type)).toEqual(expect.arrayContaining([
+                'scratch-gui/project-state/START_LOADING_VM_FILE_UPLOAD',
+                'scratch-gui/modals/CLOSE_MODAL'
+            ]));
+            finishUpload();
+            expect(await finishedActionType()).toBe('scratch-gui/project-state/DONE_LOADING_VM_WITHOUT_ID');
+        });
+
+        test('menu upload (click event) still saves into the current project', async () => {
+            const {finishUpload} = renderUploader({loadingState: LoadingState.SHOWING_WITH_ID});
+            startSelecting({type: 'click'});
+            chooseFile();
+            finishUpload();
+            expect(await finishedActionType()).toBe('scratch-gui/project-state/DONE_LOADING_VM_TO_SAVE');
+        });
+
+        test('asks before discarding unsaved changes', () => {
+            window.confirm = jest.fn(() => false);
+            renderUploader({loadingState: LoadingState.SHOWING_WITH_ID, projectChanged: true});
+            startSelecting({asNewProject: true});
+            chooseFile();
+            expect(window.confirm).toHaveBeenCalled();
+            expect(store.getActions().map(a => a.type)).not.toContain(
+                'scratch-gui/project-state/START_LOADING_VM_FILE_UPLOAD');
+        });
     });
 });

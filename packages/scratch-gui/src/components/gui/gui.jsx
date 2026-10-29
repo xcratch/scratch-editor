@@ -122,6 +122,7 @@ const GUIComponent = props => {
         onRequestCloseBackdropLibrary,
         onRequestCloseCostumeLibrary,
         onRequestCloseProjectLibrary,
+        onRequestCloseStartScreen,
         projectLibraryVisible,
         // onRequestCloseDebugModal,
         onRequestCloseTelemetryModal,
@@ -138,6 +139,7 @@ const GUIComponent = props => {
         showNewFeatureCallouts,
         soundsTabVisible,
         stageSizeMode,
+        startScreenVisible,
         targetIsStage,
         telemetryModalVisible,
         colorMode,
@@ -285,6 +287,14 @@ const GUIComponent = props => {
                 ) : null}
                 {saveVersionModalVisible ? (
                     <SaveVersionModal />
+                ) : null}
+                {startScreenVisible ? (
+                    <ProjectLibrary
+                        canSave={canSave}
+                        variant="start"
+                        onRequestClose={onRequestCloseStartScreen}
+                        onStartSelectingFileUpload={onStartSelectingFileUpload}
+                    />
                 ) : null}
                 {!menuBarHidden && <MenuBar
                     ariaRole="banner"
@@ -560,6 +570,7 @@ GUIComponent.propTypes = {
     onRequestCloseCostumeLibrary: PropTypes.func,
     onRequestCloseDebugModal: PropTypes.func,
     onRequestCloseProjectLibrary: PropTypes.func,
+    onRequestCloseStartScreen: PropTypes.func,
     onRequestCloseTelemetryModal: PropTypes.func,
     onSeeCommunity: PropTypes.func,
     onShare: PropTypes.func,
@@ -573,6 +584,7 @@ GUIComponent.propTypes = {
     onUpdateProjectThumbnail: PropTypes.func,
     platform: PropTypes.oneOf(Object.keys(PLATFORM)),
     projectLibraryVisible: PropTypes.bool,
+    startScreenVisible: PropTypes.bool,
     renderLogin: PropTypes.func,
     saveVersionModalVisible: PropTypes.bool,
     setTheme: PropTypes.func.isRequired,

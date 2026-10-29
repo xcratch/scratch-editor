@@ -178,7 +178,9 @@ const ProjectSaverHOC = function (WrappedComponent) {
             }
         }
         isShowingCreatable (props) {
-            return props.canCreateNew && props.isShowingWithoutId;
+            // Behind the start screen the default project is only a
+            // placeholder: create it once the user chooses to start a new one.
+            return props.canCreateNew && props.isShowingWithoutId && !props.startScreenVisible;
         }
         updateProjectToStorage () {
             this.props.onShowSavingAlert();
@@ -398,6 +400,7 @@ const ProjectSaverHOC = function (WrappedComponent) {
                 noBeforeUnloadHandler,
                 reduxProjectId,
                 reduxProjectTitle,
+                startScreenVisible,
                 setAutoSaveTimeoutId: setAutoSaveTimeoutIdProp,
                 saveThumbnailOnLoad,
                  
@@ -454,6 +457,7 @@ const ProjectSaverHOC = function (WrappedComponent) {
         reduxProjectId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
         reduxProjectTitle: PropTypes.string,
         saveThumbnailOnLoad: PropTypes.bool,
+        startScreenVisible: PropTypes.bool,
         storage: GUIStoragePropType,
         setAutoSaveTimeoutId: PropTypes.func.isRequired,
         manuallySaveThumbnails: PropTypes.bool,
@@ -493,6 +497,7 @@ const ProjectSaverHOC = function (WrappedComponent) {
             projectChanged: state.scratchGui.projectChanged,
             reduxProjectId: state.scratchGui.projectState.projectId,
             reduxProjectTitle: state.scratchGui.projectTitle,
+            startScreenVisible: state.scratchGui.modals.startScreen,
             vm: state.scratchGui.vm
         };
     };

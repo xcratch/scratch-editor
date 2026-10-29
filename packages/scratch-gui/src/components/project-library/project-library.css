@@ -499,3 +499,18 @@
 .file-input {
     display: none;
 }
+
+/* Inside the start screen the list flows with the page, which scrolls */
+.start-variant {
+    position: relative;
+}
+
+.start-variant .list-container,
+.start-variant .history-container {
+    height: auto;
+}
+
+.start-variant .scroll-grid {
+    overflow-y: visible;
+    min-height: 10rem;
+}

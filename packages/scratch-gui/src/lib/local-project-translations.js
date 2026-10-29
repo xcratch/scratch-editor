@@ -2,9 +2,17 @@
 // Localized labels for the browser (IndexedDB) project storage UI.
 const localProjectTranslations = {
     'ja': {
-        'xcratch.menuBar.openProjectLibrary': 'プロジェクト一覧から開く',
         'xcratch.menuBar.openProjectHistory': '履歴を見る',
-        'xcratch.menuBar.saveVersion': 'コメントを付けて保存',
+        // File menu labels, reworded to read as actions
+        'gui.menuBar.saveNow': '保存する',
+        'xcratch.menuBar.saveVersion': 'コメントを付けて保存する',
+        'gui.menuBar.downloadToComputer': 'コンピューターに保存する',
+        'xcratch.menuBar.openStartScreen': 'スタート画面に行く',
+        'xcratch.startScreen.title': 'スタート',
+        'xcratch.startScreen.language': '言語',
+        'xcratch.startScreen.new': '新しいプロジェクト',
+        'xcratch.startScreen.continue': '続ける',
+        'xcratch.startScreen.load': 'コンピューターから読み込む',
         'xcratch.saveVersionModal.title': 'バージョンを保存',
         'xcratch.saveVersionModal.keepLabel': 'このバージョンを削除されないようにロックする',
         'xcratch.saveVersionModal.save': '保存',
@@ -66,9 +74,16 @@ const localProjectTranslations = {
             'キャンセル: このタブの変更を破棄して、最新の保存内容を読み込む'
     },
     'ja-Hira': {
-        'xcratch.menuBar.openProjectLibrary': 'プロジェクトいちらんからひらく',
         'xcratch.menuBar.openProjectHistory': 'りれきをみる',
-        'xcratch.menuBar.saveVersion': 'コメントをつけてほぞん',
+        'gui.menuBar.saveNow': 'ほぞんする',
+        'xcratch.menuBar.saveVersion': 'コメントをつけてほぞんする',
+        'gui.menuBar.downloadToComputer': 'コンピューターにほぞんする',
+        'xcratch.menuBar.openStartScreen': 'スタートがめんにいく',
+        'xcratch.startScreen.title': 'スタート',
+        'xcratch.startScreen.language': 'げんご',
+        'xcratch.startScreen.new': 'あたらしいプロジェクト',
+        'xcratch.startScreen.continue': 'つづける',
+        'xcratch.startScreen.load': 'コンピューターからよみこむ',
         'xcratch.saveVersionModal.title': 'バージョンをほぞん',
         'xcratch.saveVersionModal.keepLabel': 'このバージョンをさくじょされないようにロックする',
         'xcratch.saveVersionModal.save': 'ほぞん',

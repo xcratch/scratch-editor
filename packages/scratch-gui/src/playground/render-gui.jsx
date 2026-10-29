@@ -7,7 +7,6 @@ import HashParserHOC from '../lib/hash-parser-hoc.jsx';
 import LocalProjectHOC from '../lib/local-project-hoc.jsx';
 import {
     LocalProjectStorage,
-    getLastLocalProjectId,
     setLastLocalProjectId,
     isLocalProjectId,
     localProjectExists
@@ -47,23 +46,20 @@ const updateProjectIdInHash = projectId => {
  * Decide which project to open before mounting:
  * - keep a `#https://...` or existing local `#<id>` hash as-is
  * - clear a hash pointing at a deleted local project (avoids the error page)
- * - with no hash, resume the last opened local project if it still exists
+ * Resolves to whether the start screen (list of projects saved in the
+ * browser) should be shown, i.e. no project is named by the hash or by
+ * `?project=`.
+ * @returns {Promise<boolean>} true to show the start screen
  */
 const prepareInitialProject = async () => {
     const hashValue = decodeURIComponent(window.location.hash.substr(1));
-    if (/^(http|https):\/\//.test(hashValue)) return;
+    if (/^(http|https):\/\//.test(hashValue)) return false;
     const hashMatch = window.location.hash.match(/#(\d+)/);
     if (hashMatch) {
-        const exists = await localProjectExists(hashMatch[1]);
-        if (!exists) {
-            history.replaceState(null, '', window.location.pathname + window.location.search);
-        }
-        return;
+        if (await localProjectExists(hashMatch[1])) return false;
+        history.replaceState(null, '', window.location.pathname + window.location.search);
     }
-    const lastId = getLastLocalProjectId();
-    if (lastId && await localProjectExists(lastId)) {
-        history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${lastId}`);
-    }
+    return !new URLSearchParams(window.location.search).has('project');
 };
 
 /*
@@ -122,8 +118,11 @@ export default appTarget => {
     );
 
     prepareInitialProject()
-        .catch(err => log.error(err))
-        .then(() => root.render(
+        .catch(err => {
+            log.error(err);
+            return false;
+        })
+        .then(showStartScreen => root.render(
             <WrappedGui
                 canEditTitle
                 canSave
@@ -134,6 +133,7 @@ export default appTarget => {
                 autoSaveIntervalSecs={60}
                 backpackHost={backpackHost}
                 onClickLogo={onClickLogo}
+                showStartScreen={showStartScreen}
                 onUpdateProjectId={updateProjectIdInHash}
             />
         ));
