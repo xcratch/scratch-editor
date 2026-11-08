@@ -176,20 +176,23 @@ export const updatePreloadCache = async (manifest, text, {
  * It runs in the background and never rejects.
  * @param {import('./preload-manifest.js').PreloadManifest} manifest - manifest
  * @param {string} text - source text of the manifest
- * @param {object} [options] - options
- * @param {number} [options.readyTimeout] - time to wait for a service worker [ms]
  * @returns {Promise} resolves when done
  */
-export const syncPreloadCache = async (manifest, text, {readyTimeout = 30000} = {}) => {
+export const syncPreloadCache = async (manifest, text) => {
     try {
         const sw = getServiceWorker();
         if (!sw || !hasCacheStorage()) return;
-        // Skip without a service worker, e.g. on the development server, where nothing serves the cache.
-        const registration = await waitAtMost(sw.ready, readyTimeout);
-        if (!registration) return;
+        // Start as soon as a worker is registered, even while it is installing: installing the precache of
+        // the editor can take minutes on the first visit.
+        // Without a registration, wait until a worker is ready. It never resolves when no worker is registered,
+        // e.g. on the development server, where nothing serves the cache.
+        const registered = await sw.getRegistration().catch(() => null);
+        if (!registered) await sw.ready;
         const result = await updatePreloadCache(manifest, text);
         log.info(`Preload cache updated: ${manifest.url}`, result);
+        // The worker reads the cache when it starts, which may be before the cache was filled.
         // Notify the active worker even if it does not control this page yet (first visit).
+        const registration = await sw.ready;
         if (registration.active) {
             registration.active.postMessage({type: PRELOAD_MESSAGE.UPDATED});
         }
