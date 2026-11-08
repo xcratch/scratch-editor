@@ -123,10 +123,88 @@ class ExtensionManager {
         });
 
         /**
-         * The list of preloaded extension classes.
-         * @type {Map.<string,object>}
+         * Preloaded extensions listed in the preload manifest (see `setPreloadManifest`).
+         * @type {Array.<PreloadedExtensionRecord>}
          */
-        this.preloadedExtensions = new Map();
+        this._preloadRecords = [];
+
+        /**
+         * Settles when the preload manifest is ready. Loading an extension waits for it.
+         * @type {Promise}
+         */
+        this._preloadReady = Promise.resolve();
+    }
+
+    /**
+     * @typedef {object} PreloadedExtensionRecord
+     * @property {string} url - URL of the extension module listed in the preload rules.
+     * @property {string} extensionURL - URL of the module which contains the blockClass, which is saved in projects.
+     * @property {string} entryURL - absolute URL of the mirror of `url`.
+     * @property {string} moduleURL - absolute URL of the mirror of `extensionURL`.
+     * @property {number} [originTimeout] - timeout for loading from the original URL before the mirror [ms].
+     * @property {Array.<string>} [aliases] - other URLs which refer the extension.
+     */
+
+    /**
+     * Set the preloaded extensions. Loading an extension from URL waits until the promise settles,
+     * and loads the mirror when the original URL of a preloaded extension could not be loaded.
+     * @param {Promise.<Array.<PreloadedExtensionRecord>>|Array.<PreloadedExtensionRecord>} records - preloaded
+     * extensions, or a promise for them.
+     * @returns {Promise} resolves when the records are set (never rejects).
+     */
+    setPreloadManifest (records) {
+        this._preloadReady = Promise.resolve(records)
+            .then(resolved => {
+                this._preloadRecords = Array.isArray(resolved) ? resolved : [];
+            })
+            .catch(error => {
+                log.warn(`Failed to set preloaded extensions: ${error}`);
+                this._preloadRecords = [];
+            });
+        return this._preloadReady;
+    }
+
+    /**
+     * Find the preloaded extension for the URL.
+     * @param {string} extensionURL - URL of the extension.
+     * @returns {?PreloadedExtensionRecord} the preloaded extension, or null if not found.
+     */
+    findPreloadedExtension (extensionURL) {
+        return this._preloadRecords.find(record =>
+            record.url === extensionURL ||
+            record.extensionURL === extensionURL ||
+            (Array.isArray(record.aliases) && record.aliases.includes(extensionURL))
+        ) || null;
+    }
+
+    /**
+     * Load the mirror of a preloaded extension. The extension keeps the original URL as its URL,
+     * so that projects saved with it can be loaded from the original URL elsewhere.
+     * @param {PreloadedExtensionRecord} record - preloaded extension.
+     * @returns {Promise.<{entry: object, blockClass: BlockClass}>} entry and block class of the extension.
+     */
+    fetchMirroredExtension (record) {
+        let loading;
+        if (!record.moduleURL || record.moduleURL === record.entryURL) {
+            // Integrated module (or entry with relative blockClassURL, which resolves in the mirror).
+            loading = this.fetchExtension(record.entryURL);
+        } else {
+            // Entry-only module: the blockClass is in the mirror of the module of the declared extensionURL.
+            loading = Promise.all([
+                import(/* webpackIgnore: true */ record.entryURL),
+                this.fetchBlockClass(record.moduleURL)
+            ]).then(([entryModule, blockClass]) => {
+                if (!entryModule.entry) {
+                    throw new Error(`Entry not found in module for ${record.entryURL}`);
+                }
+                return {entry: entryModule.entry, blockClass: blockClass};
+            });
+        }
+        return loading.then(({entry, blockClass}) => {
+            entry.extensionURL = record.extensionURL;
+            blockClass.extensionURL = record.extensionURL;
+            return {entry, blockClass};
+        });
     }
 
     /**
@@ -357,23 +435,8 @@ class ExtensionManager {
      * Instanceate new block object and register that in the runtime.
      * @param {object} entry - Entry object to register.
      * @param {Function} blockClass - Class of block object to register.
-     * @param {boolean} preload - Whether the extension is preloaded. Default is false.
      */
-    registerExtensionBlock (entry, blockClass, preload = false) {
-        if (preload) {
-            if (this.isExtensionLoaded(entry.extensionId)) {
-                // Do not preload the extension if it is already loaded.
-                return;
-            }
-            if (Array.from(this.preloadedExtensions.values())
-                .some(preloaded => preloaded.entry.extensionId === entry.extensionId)) {
-                // Do not preload the extension if it is already preloaded.
-                return;
-            }
-            entry.category = 'preloaded';
-            this.preloadedExtensions.set(entry.extensionURL, {entry: entry, blockClass: blockClass});
-            return;
-        }
+    registerExtensionBlock (entry, blockClass) {
         const extensionInstance = new blockClass(this.runtime);
         const extensionID = extensionInstance.getInfo().id;
         if (entry.extensionId !== extensionID) {
@@ -448,29 +511,38 @@ class ExtensionManager {
         }
 
         // To access the runtime even in outer extensions, it loaded by dynamic import() instead of extension-worker.
-        // Try xcratch format first, then TurboWarp format, then fall back to preloaded version.
-        return withTimeout(this.fetchExtension(extensionURL), EXTENSION_LOAD_TIMEOUT, extensionURL)
+        return this._preloadReady
+            .then(() => {
+                const record = this.findPreloadedExtension(extensionURL);
+                if (record) {
+                    return this._fetchPreloadedExtension(extensionURL, record);
+                }
+                // Try xcratch format first, then TurboWarp format.
+                return withTimeout(this.fetchExtension(extensionURL), EXTENSION_LOAD_TIMEOUT, extensionURL)
+                    .catch(() => this.fetchExtensionTurboWarp(extensionURL));
+            })
             .then(({entry, blockClass}) => {
                 this.registerExtensionBlock(entry, blockClass);
-            })
-            .catch(() => this.fetchExtensionTurboWarp(extensionURL)
-                .then(({entry, blockClass}) => {
-                    this.registerExtensionBlock(entry, blockClass);
-                })
-            )
-            .catch(error => {
-                // If the extension is preloaded, register it.
-                const preloadedExt = this.preloadedExtensions.get(extensionURL);
-                if (preloadedExt) {
-                    this.registerExtensionBlock(preloadedExt.entry, preloadedExt.blockClass);
-                    log.info(`Failed to load from URL, using preloaded extension: ${extensionURL}`);
-                } else {
-                    throw error;
-                }
             })
             .catch(error => {
                 log.error(`Failed to load extension: ${extensionURL}: ${error}`);
                 // Ignore error to continue loading lest of the project data.
+            });
+    }
+
+    /**
+     * Fetch a preloaded extension: try the original URL first, then the mirror.
+     * The preloaded extension is in xcratch format, so the TurboWarp format is not tried.
+     * @param {string} extensionURL - URL to load.
+     * @param {PreloadedExtensionRecord} record - preloaded extension for the URL.
+     * @returns {Promise.<{entry: object, blockClass: BlockClass}>} entry and block class of the extension.
+     */
+    _fetchPreloadedExtension (extensionURL, record) {
+        const originTimeout = record.originTimeout > 0 ? record.originTimeout : EXTENSION_LOAD_TIMEOUT;
+        return withTimeout(this.fetchExtension(extensionURL), originTimeout, extensionURL)
+            .catch(error => {
+                log.info(`Failed to load from URL, using preloaded extension: ${extensionURL}: ${error}`);
+                return withTimeout(this.fetchMirroredExtension(record), EXTENSION_LOAD_TIMEOUT, record.entryURL);
             });
     }
 

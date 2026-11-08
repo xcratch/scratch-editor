@@ -16,6 +16,7 @@ import {
 
 import extensionLibraryContent from '../lib/libraries/extensions/index.jsx';
 import preInstallExtensions from './libraries/extensions/preInstall/index.js';
+import {startPreloadExtensions} from './preload-extensions.js';
 
 /*
  * Higher Order Component to manage events emitted by the VM
@@ -41,6 +42,8 @@ const vmManagerHOC = function (WrappedComponent) {
                 // To load extension which is used in a project file.
                 this.props.vm.extensionManager.extensionLibraryContent = extensionLibraryContent;
                 preInstallExtensions(this.props.vm.extensionManager);
+                // Start before loading any extension, which waits for the preload manifest.
+                startPreloadExtensions(this.props.vm);
                 this.loadExtensionsFromURL();
             }
             if (!this.props.isPlayerOnly && !this.props.isStarted) {

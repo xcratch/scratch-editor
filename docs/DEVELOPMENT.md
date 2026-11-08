@@ -89,10 +89,10 @@ GUI (gui.jsx)
    });
    ```
 
-3. **プリロード処理**
+3. **先読み処理**
    ```javascript
-   // preload.mjs で事前に情報を取得
-   const preloadData = await fetchExtensionMetadata(extensionURL);
+   // preload-extensions.js: 起動時に manifest を読み、VM とライブラリに登録する
+   startPreloadExtensions(vm);
    ```
 
 4. **拡張機能の読み込み**
@@ -243,141 +243,9 @@ loadExtensionURL(extensionURL) {
 }
 ```
 
-### プリロードシステム
+### 先読みシステム
 
-#### プリロードルール
-
-先読みする拡張機能のURLリストは [scratch-gui/scripts/preload-rules.json](../packages/scratch-gui/scripts/preload-rules.json) に定義されています。
-
-`npm run preload` コマンドでこれらの拡張機能がダウンロードされ、`preload/` フォルダに保存されます。
-
-```json
-{
-    "approved": [
-        "https://yokobond.github.io/xcx-costumex/dist/costumex.mjs",
-        "https://microbit-more.github.io/dist/microbitMore.mjs"
-    ]
-}
-```
-
-#### プリロードスクリプト
-
-```javascript
-// preload.mjs
-async function preloadExtension(extensionPath) {
-  const module = await import(extensionPath);
-  const metadata = {
-    name: module.name,
-    description: module.description,
-    tags: module.tags
-  };
-  return metadata;
-}
-```
-
-#### プリロードのフロー
-
-プリロードシステムは、ビルド時とランタイムの2段階で動作します。
-
-##### 1. ビルド時プリロード (`npm run preload`)
-
-```
-npm run preload
-  ↓
-scripts/preload.mjs 実行
-  ↓
-preload-rules.json から承認済みURLリストを読み込み
-  ↓
-各URLに対して:
-  ├─ fetchWithTimeout() で拡張機能をダウンロード
-  ├─ isValidExtensionContent() でコンテンツを検証
-  │   └─ 'entry' または 'blockClass' の存在を確認
-  ├─ コンテンツタイプを判定:
-  │   ├─ entry のみ (Separate型):
-  │   │   ├─ entry.mjs として保存
-  │   │   ├─ extractExtensionURL() で extensionURL を抽出
-  │   │   ├─ resolveExtensionURL() で相対パスを解決
-  │   │   └─ blockClass をダウンロードして extension.mjs として保存
-  │   └─ entry + blockClass (Integrated型):
-  │       └─ extension.mjs として保存
-  └─ preload/{エンコードされたURL}/ に保存
-  ↓
-ダウンロード成功した拡張機能のリストを
-preload/preload.json に出力
-  └─ [{url: "...", path: "...", extensionURL: "..."}]
-      ├─ url: preload-rules.json に書かれたソース URL
-      └─ extensionURL: blockClass を含むモジュールの URL
-          (Separate型では entry の extensionURL を解決した body の URL、Integrated型では url と同じ)
-```
-
-##### 2. ランタイムロード (アプリ起動時)
-
-```
-アプリ起動
-  ↓
-extension-library.jsx の loadModules() が実行
-  ↓
-require.context() で preload.json を遅延ロード
-  ├─ preload.json が存在しない場合は空配列を返す
-  └─ preload.json から拡張機能リストを取得
-  ↓
-require.context() で preload/**/(entry|extension).mjs を登録
-  ↓
-各拡張機能に対して:
-  ├─ ディレクトリ内のファイル構造を判定:
-  │   ├─ entry.mjs + extension.mjs → Separate型
-  │   └─ extension.mjs のみ → Integrated型
-  ├─ Separate型の場合:
-  │   ├─ entry.mjs をロード (entry情報のみ)
-  │   ├─ blockClass は null に設定
-  │   └─ blockClassContextKey に extension.mjs のパスを保存
-  │       (実際のロードは拡張機能選択時に遅延実行)
-  └─ Integrated型の場合:
-      ├─ extension.mjs をロード
-      └─ entry と blockClass の両方を取得
-  ↓
-ロードした拡張機能を名前順にソート
-  ↓
-extensionLibraryContent に追加
-  ├─ category を 'preloaded' に設定
-  ├─ extensionURL に preload.json の extensionURL (blockClass を含むモジュールの URL) を設定
-  │   └─ カードの "Module:" 表示・プロジェクトに保存される URL はこの値になる
-  └─ 重複チェック (extensionId または extensionURL で判定)
-  ↓
-拡張機能ライブラリに表示可能
-```
-
-##### プリロードの型の違い
-
-TensorFlow のような様々な拡張機能で利用されるライブラリを含む拡張機能ではSeparate型を使用して、拡張機能選択時に blockClass を遅延ロードすることで、ライブラリのバージョン違いによる衝突の回避を図っています。
-
-**Integrated型** (統合型):
-```javascript
-// extension.mjs
-export const entry = { /* entry情報 */ };
-export const blockClass = class { /* ブロック実装 */ };
-```
-- entry と blockClass が同じファイルに含まれる
-- ビルド時に1つのファイルとしてダウンロード
-- ランタイムで entry と blockClass を同時にロード
-
-**Separate型** (分離型):
-```javascript
-// entry.mjs
-export const entry = {
-  extensionURL: 'https://example.com/extension.mjs',
-  /* その他の entry 情報 */
-};
-
-// extension.mjs (別ファイル)
-export const blockClass = class { /* ブロック実装 */ };
-```
-- entry と blockClass が別々のファイル
-- ビルド時に両方のファイルをダウンロード
-- ランタイムでは entry のみを先にロード
-- blockClass は拡張機能選択時に遅延ロード (利用ライブラリの衝突を回避)
-
----
+先読みする拡張機能は、ビルド後に置く manifest（`preload/preload.json`）とミラーで決まります。作り方は `scripts/preload-mirror.mjs`、しくみは [PRELOAD.md](PRELOAD.md) を見てください。
 
 ## データフロー
 

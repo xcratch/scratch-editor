@@ -117,9 +117,10 @@ if (process.env.NODE_ENV === 'development' || process.env.WEBPACK_SERVE) {
     const assetsManifest = require('./src/assetsManifest.json');
     console.log('Adding Workbox plugin for service worker generation');
     baseConfig
-        .addPlugin(new WorkboxPlugin.GenerateSW({
-            clientsClaim: true,
-            skipWaiting: true,
+        .addPlugin(new WorkboxPlugin.InjectManifest({
+            // The routes (navigation, preloaded extensions) are defined in the source.
+            swSrc: path.resolve(__dirname, 'src/service-worker.js'),
+            swDest: 'service-worker.js',
             additionalManifestEntries: assetsManifest,
             exclude: [
                 /\.DS_Store/,
@@ -128,20 +129,7 @@ if (process.env.NODE_ENV === 'development' || process.env.WEBPACK_SERVE) {
                 /\.map$/, // Exclude source maps from precache
                 /^\.\.\// // Exclude assets in parent directories (like ../dist/)
             ],
-            maximumFileSizeToCacheInBytes: 32 * 1024 * 1024,
-            runtimeCaching: [{
-                // Apply NetworkFirst strategy to HTML and navigation requests (e.g. /editor/, /editor/?extension=...)
-                // Online: always fetch the latest from the network; Offline: fall back to cache
-                urlPattern: ({request}) => request.mode === 'navigate',
-                handler: 'NetworkFirst',
-                options: {
-                    cacheName: 'pages-cache',
-                    networkTimeoutSeconds: 3,
-                    fetchOptions: {
-                        cache: 'reload'
-                    }
-                }
-            }]
+            maximumFileSizeToCacheInBytes: 32 * 1024 * 1024
         }))
         .addPlugin(new WebpackPwaManifest({
             publicPath: './',

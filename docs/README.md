@@ -22,6 +22,15 @@
 
 ---
 
+### [PRELOAD.md](PRELOAD.md)
+先読み拡張機能（ビルド後に差し替えられるセット、`?preload=`、PWA のオフライン対応）の説明です。
+
+**対象読者:**
+- editor を配布する人
+- 開発者
+
+---
+
 ### [FEATURES.md](FEATURES.md)
 Xcratch の主要機能について詳しく説明したドキュメントです。
 

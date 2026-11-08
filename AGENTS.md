@@ -40,3 +40,10 @@ Why:
   (`guiInitialState`).
 
 After merging, check that the built `build/index.html` still has the element.
+
+### Preloaded extensions are read at run time
+
+Preloaded extensions are not bundled by webpack. The editor reads `preload/preload.json` (or `?preload=<URL>`)
+at run time, and `packages/scratch-gui/scripts/preload-mirror.mjs` writes it with the mirrors after the build.
+The service worker (`packages/scratch-gui/src/service-worker.js`, Workbox `InjectManifest`) serves the cached
+mirrors offline. See [docs/PRELOAD.md](docs/PRELOAD.md).

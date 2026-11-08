@@ -30,7 +30,7 @@ npm-*
 
 # PWA
 assetsManifest.json
-service-worker.js
+/service-worker.js
 
-# preload
+# preload (old build-time preload directory)
 /preload
