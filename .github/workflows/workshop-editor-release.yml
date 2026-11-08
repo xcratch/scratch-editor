@@ -28,6 +28,10 @@ jobs:
   build:
     name: Build and publish workshop editor
     runs-on: ubuntu-latest
+    env:
+      # playwright-chromium's install script fails on ubuntu-latest (26.04), which Playwright does not support.
+      # The build does not need browsers.
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
     steps:
       - name: Debug info
         run: |
