@@ -47,22 +47,11 @@ Xcratch の拡張機能ローダーは、Scratch の機能を動的に拡張す�
 - キーワードによる拡張機能の検索
 - タグによるフィルタリング
 
-#### 4. プリロード機能
+#### 4. 先読み拡張機能
 
-拡張機能の情報を事前にロードすることで、拡張機能をオフラインでも簡単に利用できるようにしています。
+editor と一緒に配る拡張機能のミラーです。配布元につながらないフィルタ環境や、PWA のオフライン環境でも拡張機能を読み込めます。先読みするセットは editor のビルド後に差し替えられ、`?preload=<manifest の URL>` でも選べます。
 
-**プリロードルール**: [scripts/preload-rules.json](../packages/scratch-gui/scripts/preload-rules.json)
-
-```json
-{
-    "approved": [
-        "https://yokobond.github.io/xcx-costumex/dist/costumex.mjs",
-        "https://microbit-more.github.io/dist/microbitMore.mjs"
-    ]
-}
-```
-
-**プリロードスクリプト**: [scripts/preload.mjs](../packages/scratch-gui/scripts/preload.mjs)
+詳しくは [PRELOAD.md](PRELOAD.md) を見てください。
 
 ### 実装の詳細
 
