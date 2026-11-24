@@ -24,6 +24,7 @@ describe('projectSaverHOC', () => {
         store = mockStore({
             scratchGui: {
                 config: legacyConfig,
+                modals: {},
                 projectChanged: false,
                 projectState: {},
                 projectTitle: 'Scratch Project',
@@ -198,6 +199,76 @@ describe('projectSaverHOC', () => {
                 isShowingWithoutId
                 isUpdating={false}
                 loadingState={LoadingState.SHOWING_WITHOUT_ID}
+                store={store}
+                vm={vm}
+                onCreateProject={mockedCreateProject}
+            />
+        );
+        expect(mockedCreateProject).toHaveBeenCalled();
+    });
+
+    test('while the start screen is showing, the default project will NOT be created', () => {
+        const mockedCreateProject = jest.fn();
+        const Component = () => <div />;
+        const WrappedComponent = projectSaverHOC(Component);
+        const {rerender} = render(
+            <WrappedComponent
+                canCreateNew
+                startScreenVisible
+                isCreatingNew={false}
+                isShowingWithId={false}
+                isShowingWithoutId={false}
+                isUpdating={false}
+                loadingState={LoadingState.LOADING_VM_NEW_DEFAULT}
+                store={store}
+                vm={vm}
+                onCreateProject={mockedCreateProject}
+            />
+        );
+        rerender(
+            <WrappedComponent
+                canCreateNew
+                isShowingWithoutId
+                startScreenVisible
+                isCreatingNew={false}
+                isShowingWithId={false}
+                isUpdating={false}
+                loadingState={LoadingState.SHOWING_WITHOUT_ID}
+                store={store}
+                vm={vm}
+                onCreateProject={mockedCreateProject}
+            />
+        );
+        expect(mockedCreateProject).not.toHaveBeenCalled();
+    });
+
+    test('when the start screen closes over the default project, project will be created', () => {
+        const mockedCreateProject = jest.fn();
+        const Component = () => <div />;
+        const WrappedComponent = projectSaverHOC(Component);
+        const {rerender} = render(
+            <WrappedComponent
+                canCreateNew
+                isShowingWithoutId
+                startScreenVisible
+                isCreatingNew={false}
+                isShowingWithId={false}
+                isUpdating={false}
+                loadingState={LoadingState.SHOWING_WITHOUT_ID}
+                store={store}
+                vm={vm}
+                onCreateProject={mockedCreateProject}
+            />
+        );
+        rerender(
+            <WrappedComponent
+                canCreateNew
+                isShowingWithoutId
+                isCreatingNew={false}
+                isShowingWithId={false}
+                isUpdating={false}
+                loadingState={LoadingState.SHOWING_WITHOUT_ID}
+                startScreenVisible={false}
                 store={store}
                 vm={vm}
                 onCreateProject={mockedCreateProject}
@@ -677,6 +748,7 @@ describe('projectSaverHOC', () => {
     const makeStoreWith = ({storage, projectId}) => mockStore({
         scratchGui: {
             config: {...legacyConfig, storage},
+            modals: {},
             projectChanged: false,
             projectState: {projectId},
             projectTitle: 'Scratch Project',

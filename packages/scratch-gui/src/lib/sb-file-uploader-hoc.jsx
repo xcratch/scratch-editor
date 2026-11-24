@@ -17,7 +17,8 @@ import {
 import {setProjectTitle} from '../reducers/project-title';
 import {
     openLoadingProject,
-    closeLoadingProject
+    closeLoadingProject,
+    closeStartScreen
 } from '../reducers/modals';
 import {
     closeFileMenu
@@ -62,9 +63,14 @@ const SBFileUploaderHOC = function (WrappedComponent) {
         componentWillUnmount () {
             this.removeFileObjects();
         }
-        // step 1: this is where the upload process begins
-        handleStartSelectingFileUpload () {
+        // step 1: this is where the upload process begins. With
+        // {asNewProject: true} (start screen), the file is loaded as a new
+        // project instead of replacing the one that is showing. Menu items
+        // pass their click event here, which leaves asNewProject unset.
+        handleStartSelectingFileUpload (options) {
             this.createFileObjects(); // go to step 2
+            // Set after createFileObjects, which resets it with the old objects
+            this.asNewProject = !!(options && options.asNewProject);
         }
         // step 2: create a FileReader and an <input> element, and issue a
         // pseudo-click to it. That will open the file chooser dialog.
@@ -103,8 +109,11 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                 // we must confirm with the user that they really intend to
                 // replace it. (If they don't own the project and haven't
                 // changed it, no need to confirm.)
+                // A new project replaces nothing, but unsaved changes to the
+                // one showing would still be lost.
                 let uploadAllowed = true;
-                if (userOwnsProject || (projectChanged && isShowingWithoutId)) {
+                if (this.asNewProject ? projectChanged :
+                    (userOwnsProject || (projectChanged && isShowingWithoutId))) {
                     uploadAllowed = confirm( // eslint-disable-line no-alert
                         intl.formatMessage(sharedMessages.replaceProjectWarning)
                     );
@@ -112,6 +121,11 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                 if (uploadAllowed) {
                     // cues step 4
                     this.props.requestProjectUpload(loadingState);
+                    // Show the editor for the chosen file. Closed only now, after
+                    // leaving the showing state, so a start screen opened at
+                    // startup doesn't create a project for the default one, and
+                    // cancelling the file chooser keeps it open.
+                    this.props.closeStartScreen();
                 } else {
                     // skips ahead to step 7
                     this.removeFileObjects();
@@ -154,7 +168,8 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                         alert(this.props.intl.formatMessage(messages.loadError)); // eslint-disable-line no-alert
                     })
                     .then(() => {
-                        this.props.onLoadingFinished(this.props.loadingState, loadingSuccess);
+                        this.props.onLoadingFinished(this.props.loadingState, loadingSuccess,
+                            this.asNewProject);
                         // go back to step 7: whether project loading succeeded
                         // or failed, reset file objects
                         this.removeFileObjects();
@@ -171,12 +186,14 @@ const SBFileUploaderHOC = function (WrappedComponent) {
             this.inputElement = null;
             this.fileReader = null;
             this.fileToUpload = null;
+            this.asNewProject = false;
         }
         render () {
             const {
                  
                 cancelFileUpload,
                 closeFileMenu: closeFileMenuProp,
+                closeStartScreen: closeStartScreenProp,
                 isLoadingUpload,
                 isShowingWithoutId,
                 loadingState,
@@ -207,6 +224,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
         canSave: PropTypes.bool,
         cancelFileUpload: PropTypes.func,
         closeFileMenu: PropTypes.func,
+        closeStartScreen: PropTypes.func,
         intl: intlShape.isRequired,
         isLoadingUpload: PropTypes.bool,
         isShowingWithoutId: PropTypes.bool,
@@ -239,10 +257,13 @@ const SBFileUploaderHOC = function (WrappedComponent) {
     const mapDispatchToProps = (dispatch, ownProps) => ({
         cancelFileUpload: loadingState => dispatch(onLoadedProject(loadingState, false, false)),
         closeFileMenu: () => dispatch(closeFileMenu()),
+        closeStartScreen: () => dispatch(closeStartScreen()),
         // transition project state from loading to regular, and close
-        // loading screen and file menu
-        onLoadingFinished: (loadingState, success) => {
-            dispatch(onLoadedProject(loadingState, ownProps.canSave, success));
+        // loading screen and file menu. A new project finishes as "showing
+        // without id" (not saved over the current one), which
+        // ProjectSaverHOC then creates in storage.
+        onLoadingFinished: (loadingState, success, asNewProject) => {
+            dispatch(onLoadedProject(loadingState, ownProps.canSave && !asNewProject, success));
             dispatch(closeLoadingProject());
             dispatch(closeFileMenu());
         },

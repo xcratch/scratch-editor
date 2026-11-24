@@ -34,6 +34,7 @@ import {
     openTipsLibrary,
     openDebugModal,
     openProjectLibrary,
+    openStartScreen,
     openSaveVersionModal
 } from '../../reducers/modals';
 import {setPlayer} from '../../reducers/mode';
@@ -194,6 +195,7 @@ class MenuBar extends React.Component {
         bindAll(this, [
             'handleClickNew',
             'handleClickOpenProjectLibrary',
+            'handleClickOpenStartScreen',
             'handleClickRemix',
             'handleClickSave',
             'handleClickSaveAsCopy',
@@ -231,6 +233,14 @@ class MenuBar extends React.Component {
     }
     handleClickOpenProjectLibrary () {
         this.props.onOpenProjectLibrary();
+        this.props.onRequestCloseFile();
+    }
+    handleClickOpenStartScreen () {
+        // Save first so the list shows the latest state of this project
+        if (this.props.canSave && this.props.projectChanged && this.props.isShowingWithId) {
+            this.props.onClickSave();
+        }
+        this.props.onOpenStartScreen();
         this.props.onRequestCloseFile();
     }
     handleClickRemix () {
@@ -441,6 +451,20 @@ class MenuBar extends React.Component {
                 id="gui.menuBar.new"
             />
         );
+        const saveToComputerItem = (
+            <SB3Downloader>{(className, downloadProjectCallback) => (
+                <MenuItem
+                    className={className}
+                    onClick={this.getSaveToComputerHandler(downloadProjectCallback)}
+                >
+                    <FormattedMessage
+                        defaultMessage="Save to your computer"
+                        description="Menu bar item for downloading a project to your computer" // eslint-disable-line max-len
+                        id="gui.menuBar.downloadToComputer"
+                    />
+                </MenuItem>
+            )}</SB3Downloader>
+        );
         const remixButton = (
             <Button
                 className={classNames(
@@ -471,15 +495,18 @@ class MenuBar extends React.Component {
                 <div className={styles.mainMenu}>
                     <div className={styles.fileGroup}>
                         <div className={classNames(styles.menuBarItem)}>
+                            {/* With the project list, the logo goes back to the start screen */}
                             <img
                                 id="logo_img"
                                 alt="Scratch"
                                 className={classNames(styles.scratchLogo, {
-                                    [styles.clickable]: typeof this.props.onClickLogo !== 'undefined'
+                                    [styles.clickable]: this.props.hasProjectList ||
+                                        typeof this.props.onClickLogo !== 'undefined'
                                 })}
                                 draggable={false}
                                 src={getScratchLogo(this.props.platform)}
-                                onClick={this.props.onClickLogo}
+                                onClick={this.props.hasProjectList ?
+                                    this.handleClickOpenStartScreen : this.props.onClickLogo}
                             />
                         </div>
                         {(this.props.canChangeColorMode || this.props.canChangeLanguage || this.props.canChangeTheme) &&
@@ -515,16 +542,31 @@ class MenuBar extends React.Component {
                                     place={this.props.isRtl ? 'left' : 'right'}
                                     onRequestClose={this.props.onRequestCloseFile}
                                 >
+                                    {/* With the project list (start screen), opening and creating projects
+                                      * happens there, so this menu only goes back to it and saves.
+                                      * Workshop mode has no project list and keeps the full menu. */}
                                     <MenuSection>
-                                        <MenuItem
-                                            isRtl={this.props.isRtl}
-                                            onClick={this.handleClickNew}
-                                        >
-                                            {newProjectMessage}
-                                        </MenuItem>
+                                        {this.props.hasProjectList ? (
+                                            <MenuItem
+                                                onClick={this.handleClickOpenStartScreen}
+                                            >
+                                                <FormattedMessage
+                                                    defaultMessage="Go to the start screen"
+                                                    description="Menu bar item for going back to the start screen listing the projects saved in the browser" // eslint-disable-line max-len
+                                                    id="xcratch.menuBar.openStartScreen"
+                                                />
+                                            </MenuItem>
+                                        ) : (
+                                            <MenuItem
+                                                isRtl={this.props.isRtl}
+                                                onClick={this.handleClickNew}
+                                            >
+                                                {newProjectMessage}
+                                            </MenuItem>
+                                        )}
                                     </MenuSection>
                                     {(this.props.canSave || this.props.canCreateCopy || this.props.canRemix ||
-                                        this.props.canSaveProjectVersion) && (
+                                        this.props.canSaveProjectVersion || this.props.hasProjectList) && (
                                         <MenuSection>
                                             {this.props.canSave && (
                                                 <MenuItem onClick={this.handleClickSave}>
@@ -540,6 +582,7 @@ class MenuBar extends React.Component {
                                                     />
                                                 </MenuItem>
                                             )}
+                                            {this.props.hasProjectList && saveToComputerItem}
                                             {this.props.canCreateCopy && (
                                                 <MenuItem onClick={this.handleClickSaveAsCopy}>
                                                     {createCopyMessage}
@@ -552,44 +595,27 @@ class MenuBar extends React.Component {
                                             )}
                                         </MenuSection>
                                     )}
-                                    <MenuSection>
-                                        {this.props.canOpenProjectLibrary && (
-                                            <MenuItem
-                                                onClick={this.handleClickOpenProjectLibrary}
-                                            >
-                                                {this.props.hasProjectList ? (
-                                                    <FormattedMessage
-                                                        defaultMessage="Open from project list"
-                                                        description="Menu bar item for opening the list of projects saved in the browser" // eslint-disable-line max-len
-                                                        id="xcratch.menuBar.openProjectLibrary"
-                                                    />
-                                                ) : (
+                                    {!this.props.hasProjectList && (
+                                        <MenuSection>
+                                            {this.props.canOpenProjectLibrary && (
+                                                <MenuItem
+                                                    onClick={this.handleClickOpenProjectLibrary}
+                                                >
                                                     <FormattedMessage
                                                         defaultMessage="View history"
                                                         description="Menu bar item for opening the version history of the current project (workshop mode, no project list)" // eslint-disable-line max-len
                                                         id="xcratch.menuBar.openProjectHistory"
                                                     />
-                                                )}
-                                            </MenuItem>
-                                        )}
-                                        <MenuItem
-                                            onClick={this.props.onStartSelectingFileUpload}
-                                        >
-                                            {this.props.intl.formatMessage(sharedMessages.loadFromComputerTitle)}
-                                        </MenuItem>
-                                        <SB3Downloader>{(className, downloadProjectCallback) => (
+                                                </MenuItem>
+                                            )}
                                             <MenuItem
-                                                className={className}
-                                                onClick={this.getSaveToComputerHandler(downloadProjectCallback)}
+                                                onClick={this.props.onStartSelectingFileUpload}
                                             >
-                                                <FormattedMessage
-                                                    defaultMessage="Save to your computer"
-                                                    description="Menu bar item for downloading a project to your computer" // eslint-disable-line max-len
-                                                    id="gui.menuBar.downloadToComputer"
-                                                />
+                                                {this.props.intl.formatMessage(sharedMessages.loadFromComputerTitle)}
                                             </MenuItem>
-                                        )}</SB3Downloader>
-                                    </MenuSection>
+                                            {saveToComputerItem}
+                                        </MenuSection>
+                                    )}
                                 </MenuBarMenu>
                             </div>
                         )}
@@ -990,6 +1016,7 @@ MenuBar.propTypes = {
     isRtl: PropTypes.bool,
     isShared: PropTypes.bool,
     isShowingProject: PropTypes.bool,
+    isShowingWithId: PropTypes.bool,
     isTotallyNormal: PropTypes.bool,
     isUpdating: PropTypes.bool,
     locale: PropTypes.string.isRequired,
@@ -1016,6 +1043,7 @@ MenuBar.propTypes = {
     onClickEdit: PropTypes.func,
     onClickFile: PropTypes.func,
     onOpenProjectLibrary: PropTypes.func,
+    onOpenStartScreen: PropTypes.func,
     onOpenSaveVersionModal: PropTypes.func,
     onClickLogin: PropTypes.func,
     onClickLogo: PropTypes.func,
@@ -1045,6 +1073,7 @@ MenuBar.propTypes = {
     onStartSelectingFileUpload: PropTypes.func,
     // onToggleLoginOpen: PropTypes.func,
     platform: PropTypes.oneOf(Object.keys(PLATFORM)),
+    projectChanged: PropTypes.bool,
     projectTitle: PropTypes.string,
     renderLogin: PropTypes.func,
     settingsMenuOpen: PropTypes.bool,
@@ -1079,6 +1108,7 @@ const mapStateToProps = (state, ownProps) => {
             typeof state.scratchGui.config?.storage?.saveVersionWithMeta === 'function' &&
             getIsShowingWithId(loadingState),
         hasProjectList: typeof state.scratchGui.config?.storage?.listProjects === 'function',
+        isShowingWithId: getIsShowingWithId(loadingState),
         currentLocale: state.locales.locale,
         fileMenuOpen: fileMenuOpen(state),
         editMenuOpen: editMenuOpen(state),
@@ -1088,6 +1118,7 @@ const mapStateToProps = (state, ownProps) => {
         locale: state.locales.locale,
         loginMenuOpen: loginMenuOpen(state),
         modeMenuOpen: modeMenuOpen(state),
+        projectChanged: state.scratchGui.projectChanged,
         projectTitle: state.scratchGui.projectTitle,
         settingsMenuOpen: settingsMenuOpen(state),
         username: ownProps.username ?? (user ? user.username : null),
@@ -1143,6 +1174,7 @@ const mapDispatchToProps = (dispatch, ownProps) => ({
     onRequestCloseSettings: () => dispatch(closeSettingsMenu()),
     onClickNew: needSave => dispatch(requestNewProject(needSave)),
     onOpenProjectLibrary: () => dispatch(openProjectLibrary()),
+    onOpenStartScreen: () => dispatch(openStartScreen()),
     onOpenSaveVersionModal: () => dispatch(openSaveVersionModal()),
     onClickRemix: () => dispatch(remixProject()),
     onClickSave: () => dispatch(manualUpdateProject()),
